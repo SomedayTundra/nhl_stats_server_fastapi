@@ -2,6 +2,20 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional
 
+class TeamStanding(BaseModel):
+    _id: int
+    date: str
+    team_name: str
+    local_logo: str
+    wins: int
+    losses: int
+    ot_losses: int
+    points: int
+    goals_for: int
+    goals_against: int
+    goal_diff: int
+
+
 class IssueStatus(str, Enum):
     open = "open"
     in_progress = "in_progress"
