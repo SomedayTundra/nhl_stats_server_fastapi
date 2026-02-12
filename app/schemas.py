@@ -3,10 +3,10 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 class TeamStanding(BaseModel):
-    _id: int
+    # _id: int
     date: str
     team_name: str
-    local_logo: str
+    # local_logo: str
     wins: int
     losses: int
     ot_losses: int
