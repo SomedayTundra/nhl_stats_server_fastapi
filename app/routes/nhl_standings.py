@@ -83,69 +83,69 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today):
             }
         }
     )
-    # pipeline.append(
-    #     {
-    #         "$unwind": { "$team_info" }
-    #     }
-    # )
-    # pipeline.append(
-    #     {
-    #         "$sort": { "date": 1 }
-    #     }
-    # )
-    # pipeline.append(
-    #     {
-    #         "$lookup": {
-    #             "from": "team_data",
-    #             "localField": 'team_info.name',
-    #             "foreignField": "teamName",
-    #             "as": "team_data"
-    #         }
-    #     }
-    # )
-    # pipeline.append(
-    #     {
-    #         "$unwind": { "$team_data" }
-    #     }
-    # )
-    # pipeline.append(
-    #     {
-    #         "project": {
-    #             "_id": 1,
-    #             "date": 1,
-    #             "team_name": '$team_info.name',
-    #             "local_logo": '$team_data.localLogo',
-    #             "wins": '$team_info.wins',
-    #             "losses": '$team_info.losses',
-    #             "ot_losses": '$team_info.ot_losses',
-    #             "points": '$team_info.points',
-    #             "goals_for": '$team_info.goals_for',
-    #             "goals_against": '$team_info.goals_against',
-    #             "goal_diff": '$team_info.goal_diff',
-    #         }
-    #     }
-    # )
+    pipeline.append(
+        {
+            "$unwind": "$team_info"
+        }
+    )
+    pipeline.append(
+        {
+            "$sort": { "date": 1 }
+        }
+    )
+    pipeline.append(
+        {
+            "$lookup": {
+                "from": "team_data",
+                "localField": 'team_info.name',
+                "foreignField": "teamName",
+                "as": "team_data"
+            }
+        }
+    )
+    pipeline.append(
+        {
+            "$unwind": "$team_data"
+        }
+    )
+    pipeline.append(
+        {
+            "$project": {
+                "_id": 1,
+                "date": 1,
+                "team_name": '$team_info.name',
+                "logo": '$team_data.teamLogo',
+                "wins": '$team_info.wins',
+                "losses": '$team_info.losses',
+                "ot_losses": '$team_info.ot_losses',
+                "points": '$team_info.points',
+                "goals_for": '$team_info.goals_for',
+                "goals_against": '$team_info.goals_against',
+                "goal_diff": '$team_info.goal_diff',
+            }
+        }
+    )
 
     results = collection_team_standings.aggregate(pipeline)
 
     team_standing_results = []
     for entry in results:
         entry_date = entry["date"]
-        for info in entry["team_info"]:
-            new_team_standing = TeamStanding(
-                # _id = -1,
-                date = entry_date,
-                team_name = info["name"],
-                # local_logo = info["local_logo"],
-                wins = info["wins"],
-                losses = info["losses"],
-                ot_losses = info["ot_losses"],
-                points = info["points"],
-                goals_for = info["goals_for"],
-                goals_against = info["goals_against"],
-                goal_diff = info["goal_diff"],
-            )
-            team_standing_results.append(new_team_standing)
+
+        new_team_standing = TeamStanding(
+            # _id = -1,
+            date = entry_date,
+            team_name = entry["team_name"],
+            logo = entry["logo"],
+            wins = entry["wins"],
+            losses = entry["losses"],
+            ot_losses = entry["ot_losses"],
+            points = entry["points"],
+            goals_for = entry["goals_for"],
+            goals_against = entry["goals_against"],
+            goal_diff = entry["goal_diff"],
+        )
+        team_standing_results.append(new_team_standing)
 
     return team_standing_results
 

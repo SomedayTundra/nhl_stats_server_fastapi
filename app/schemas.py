@@ -6,7 +6,7 @@ class TeamStanding(BaseModel):
     # _id: int
     date: str
     team_name: str
-    # local_logo: str
+    logo: str
     wins: int
     losses: int
     ot_losses: int
