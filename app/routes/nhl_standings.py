@@ -1,7 +1,9 @@
 import logging
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import FileResponse
 from app.schemas import TeamStanding
 from pymongo import MongoClient, typings
+from pathlib import Path
 
 
 ############################
@@ -36,10 +38,25 @@ except Exception as e:
     raise Exception("  The following error occurred: ", e)
 
 ############################
-# TODAY:  "/nhl_standings"
-#
+# MISC
+LOGOS_DIR = "logos"
+
 from datetime import datetime
 today = datetime.today().strftime('%Y-%m-%d')
+
+
+############################
+# ROUTE:  "/nhl_standings/logos"
+#
+@router.get("/logos")
+async def get_image(logo_filename: str = "DET_light.svg"):
+    image_path = Path(LOGOS_DIR, logo_filename)
+    logging.info(f"ROUTE: /nhl_standings/logos  --  logo_filename={logo_filename}")
+    logging.info(f"       image_path={image_path.__str__()}")
+    if not image_path.is_file():
+        return {"error": f"logo not found on the server: {logo_filename}"}
+    return FileResponse(image_path)
+
 
 ############################
 # ROUTE:  "/nhl_standings"
