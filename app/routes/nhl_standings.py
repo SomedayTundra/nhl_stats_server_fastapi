@@ -48,6 +48,9 @@ today = datetime.today().strftime('%Y-%m-%d')
 ############################
 # ROUTE:  "/nhl_standings/logos"
 #
+# FIXME: MOVE THIS INTO ITS OWN FILE
+# FIXME: THE DEFAULT LOG WOULD MORE APPROPRIATELY BE THE NHL LOGO
+#
 @router.get("/logos")
 async def get_image(logo_filename: str = "DET_light.svg"):
     image_path = Path(LOGOS_DIR, logo_filename)
@@ -114,7 +117,7 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today):
                 "_id": 1,
                 "date": 1,
                 "team_name": '$team_info.name',
-                "logo": '$team_data.teamLogo',
+                "logo": '$team_data.localLogo',
                 "wins": '$team_info.wins',
                 "losses": '$team_info.losses',
                 "ot_losses": '$team_info.ot_losses',
