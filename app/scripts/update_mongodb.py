@@ -9,41 +9,31 @@ from calendar import monthrange
 ############################################
 # DEBUG FLAGS
 
-#
 # if True, we nuke and rebuild the f"{CURRENT_SEASON}" collection
-#
-# DEBUG_RESET_COLLECTION_CURRENT_SEASON = True
 DEBUG_RESET_COLLECTION__CURRENT_SEASON = False
 
-#
 # if True, we nuke and rebuild the 'team_data' collection
-#
-# DEBUG_RESET_COLLECTION__TEAM_DATA = True
-DEBUG_RESET_COLLECTION__TEAM_DATA = False
+DEBUG_RESET_COLLECTION__TEAM_DATA = True
 
-#
 # if True, we only operate on the last four days of any given month
-#
-# DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = True
 DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
 
-#
 # if True, more verbose debug output is included
-#
 DEBUG_VERBOSE = True
-# DEBUG_VERBOSE = False
 
-#
 ############################################
 
 # constants for talking to the MongoDB instance
 MONGO_URI_LOCALHOST = "mongodb://localhost:27017/"
 MONGO_URI = MONGO_URI_LOCALHOST
 
-MONGO_DB_NAME = "nhl_stats"
+MONGO_DB_NAME_NHL_STATS = "nhl_stats"
+MONGO_COLLECTION_TEAM_DATA = "team_data"
 MONGO_COLLECTION_STANDINGS = "standings"
 
-LOCAL_IMAGE_FOLDER = "..\\..\\client\\src\\assets\\logos"
+
+LOCAL_IMAGE_FOLDER = "..\\..\\logos"
+# LOCAL_IMAGE_FOLDER = "..\\..\\client\\src\\assets\\logos"
 
 # constants for talking to the NHL API
 # current season: 2025/2026
@@ -62,7 +52,6 @@ MONTHS_AND_YEARS = [
     # (2026, 4),
 ]
 
-TEAM_DATA = "team_data"
 
 
 def get_image_name_from_image_url(remote_image_url):
@@ -144,7 +133,7 @@ def farm_standings_for_month(year, month):
             break
 
         # if we already have data for this day, skip it
-        find_one_result = db_team_standings.find_one({"date": target_date_string})
+        find_one_result = collection_team_standings.find_one({"date": target_date_string})
         if find_one_result:
             print(" ..Data already exists in our database for this day, moving on..")
         else:
@@ -168,25 +157,26 @@ try:
     print(f"Attempting to connect to: {MONGO_URI}")
     mongo_client.admin.command("ping")
     print(f"Connected successfully [{mongo_client.address}]")
+    database = mongo_client[MONGO_DB_NAME_NHL_STATS]
 except Exception as e:
     raise Exception("  The following error occurred: ", e)
 
-# DEBUG: nuke the old database first
-if DEBUG_RESET_COLLECTION__CURRENT_SEASON:
-    print(f'!!Dropping db "{CURRENT_SEASON}" for a fresh start!!')
-    mongo_client.drop_database(MONGO_DB_NAME)
-
 # DEBUG: nuke the team data collection
 if DEBUG_RESET_COLLECTION__TEAM_DATA:
-    print(f'!!Dropping db "{TEAM_DATA}" for a fresh start!!')
-    mongo_client.drop_database(TEAM_DATA)
+    print(f'!!Dropping db "{MONGO_COLLECTION_TEAM_DATA}" for a fresh start!!')
+    database.drop_collection(MONGO_COLLECTION_TEAM_DATA)
+
+# DEBUG: nuke the "stats for the current season" collection
+if DEBUG_RESET_COLLECTION__CURRENT_SEASON:
+    print(f'!!Dropping db "{CURRENT_SEASON}" for a fresh start!!')
+    database.drop_collection(MONGO_COLLECTION_STANDINGS)
+
 
 print()
 
 # build simplified standings info documents and add them to the database
-database = mongo_client[MONGO_DB_NAME]
-db_teams_data = database[TEAM_DATA]
-db_team_standings = database[CURRENT_SEASON]
+collection_teams_data = database[MONGO_COLLECTION_TEAM_DATA]
+collection_team_standings = database[CURRENT_SEASON]
 
 # grab the standings for all the days in the given month of the given year
 print()
@@ -203,12 +193,12 @@ for year, month in MONTHS_AND_YEARS:
         for team in all_team_stats_on_this_day:
             # if we don't have data stored for this team yet, build a team data dictionary for it
             TEAM_NAME = team["teamName"]["default"]
-            found_it = db_teams_data.find_one({"teamName": TEAM_NAME})
+            found_it = collection_teams_data.find_one({"teamName": TEAM_NAME})
             if found_it:
                 if DEBUG_VERBOSE:
                     print(f"(team data already exists in db for {TEAM_NAME}, skipping)")
             else:
-                db_teams_data.insert_one(
+                collection_teams_data.insert_one(
                     {
                         "conferenceName": team["conferenceName"],
                         "conferenceAbbrev": team["conferenceAbbrev"],
@@ -240,7 +230,7 @@ for year, month in MONTHS_AND_YEARS:
             }
             all_team_standings_on_this_day["team_info"].append(team_standings)
 
-        db_team_standings.insert_one(all_team_standings_on_this_day)
+        collection_team_standings.insert_one(all_team_standings_on_this_day)
         print(
             f"\nInserted stats for {all_team_standings_on_this_day['date']} into our database"
         )
