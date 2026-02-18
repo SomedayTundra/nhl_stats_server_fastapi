@@ -1,8 +1,8 @@
 import logging
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from app.schemas import TeamStanding
-from pymongo import MongoClient, typings
+from pymongo import MongoClient
 from pathlib import Path
 
 
@@ -48,7 +48,7 @@ today = datetime.today().strftime('%Y-%m-%d')
 ############################
 # ROUTE:  "/nhl_standings/logos"
 #
-# FIXME: MOVE THIS INTO ITS OWN FILE
+# FIXME: MOVE THIS "logos" route INTO ITS OWN FILE
 # FIXME: THE DEFAULT LOG WOULD MORE APPROPRIATELY BE THE NHL LOGO
 #
 @router.get("/logos")
@@ -151,26 +151,3 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today):
         team_standing_results.append(new_team_standing)
 
     return team_standing_results
-
-    # .match({date: {$gte: startDate, $lte: endDate}})
-    # .unwind('$team_info')
-    #  // .match({'team_info.name': {$in: ['Detroit Red Wings', 'Toronto Maple Leafs']}})
-    # .sort({date: 1})
-    # .lookup({from: 'team_data', localField: 'team_info.name', foreignField: 'teamName', as: 'team_data'})
-    # .unwind("$team_data") \
-    # .project({
-    #     _id: 1,
-    #     date: 1,
-    #     team_name: '$team_info.name',
-    #     local_logo: '$team_data.localLogo',
-    #     wins: '$team_info.wins',
-    #     losses: '$team_info.losses',
-    #     ot_losses: '$team_info.ot_losses',
-    #     points: '$team_info.points',
-    #     goals_for: '$team_info.goals_for',
-    #     goals_against: '$team_info.goals_against',
-    #     goal_diff: '$team_info.goal_diff',
-    # }) \
-    # .toArray();
-
-    return results
