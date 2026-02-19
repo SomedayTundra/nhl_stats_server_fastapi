@@ -13,7 +13,7 @@ from calendar import monthrange
 DEBUG_RESET_COLLECTION__CURRENT_SEASON = False
 
 # if True, we nuke and rebuild the 'team_data' collection
-DEBUG_RESET_COLLECTION__TEAM_DATA = True
+DEBUG_RESET_COLLECTION__TEAM_DATA = False
 
 # if True, we only operate on the last four days of any given month
 DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
