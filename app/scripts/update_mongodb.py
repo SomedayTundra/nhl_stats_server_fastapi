@@ -33,9 +33,9 @@ MONGO_COLLECTION_STANDINGS = "standings"
 
 
 LOCAL_IMAGE_FOLDER = "..\\..\\logos"
-# LOCAL_IMAGE_FOLDER = "..\\..\\client\\src\\assets\\logos"
 
 # constants for talking to the NHL API
+#
 # current season: 2025/2026
 #     start date: 10/07/2025
 #       end date: 04/19/2026
@@ -48,8 +48,8 @@ MONTHS_AND_YEARS = [
     (2025, 12),
     (2026, 1),
     (2026, 2),
-    # (2026, 3),
-    # (2026, 4),
+    (2026, 3),
+    (2026, 4),
 ]
 
 
@@ -64,9 +64,7 @@ def get_image_name_from_image_url(remote_image_url):
     return image_name
 
 
-def get_local_image_path_for_image_url(
-    remote_image_url, local_save_path=LOCAL_IMAGE_FOLDER
-):
+def get_local_image_path_for_image_url(remote_image_url, local_save_path=LOCAL_IMAGE_FOLDER):
     image_name = get_image_name_from_image_url(remote_image_url)
 
     # glue together the given local save path and the stripped down image name
@@ -206,8 +204,8 @@ for year, month in MONTHS_AND_YEARS:
                         "divisionAbbrev": team["divisionAbbrev"],
                         "placeName": team["placeName"]["default"],
                         "teamName": TEAM_NAME,
-                        "teamCommonName": team["teamCommonName"],
-                        "teamAbbrev": team["teamAbbrev"],
+                        "teamCommonName": team["teamCommonName"]["default"],
+                        "teamAbbrev": team["teamAbbrev"]["default"],
                         "teamLogo": team["teamLogo"],
                         "localLogo": get_image_name_from_image_url(team["teamLogo"]),
                     }
@@ -220,6 +218,8 @@ for year, month in MONTHS_AND_YEARS:
 
             team_standings = {
                 "name": team["teamName"]["default"],
+                "common_name": team["teamCommonName"],
+                "abbrev": team["teamAbbrev"],
                 "wins": team["wins"],
                 "losses": team["losses"],
                 "ot_losses": team["otLosses"],
