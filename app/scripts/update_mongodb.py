@@ -29,7 +29,7 @@ MONGO_URI = MONGO_URI_LOCALHOST
 
 MONGO_DB_NAME_NHL_STATS = "nhl_stats"
 MONGO_COLLECTION_TEAM_DATA = "team_data"
-MONGO_COLLECTION_STANDINGS = "standings"
+MONGO_COLLECTION_CURRENT_SEASON = "season_20252026"
 
 
 LOCAL_IMAGE_FOLDER = "..\\..\\logos"
@@ -41,7 +41,6 @@ LOCAL_IMAGE_FOLDER = "..\\..\\logos"
 #       end date: 04/19/2026
 nhl_client = NHLClient()
 
-CURRENT_SEASON = "season_20252026"
 MONTHS_AND_YEARS = [
     (2025, 10),
     (2025, 11),
@@ -161,20 +160,20 @@ except Exception as e:
 
 # DEBUG: nuke the team data collection
 if DEBUG_RESET_COLLECTION__TEAM_DATA:
-    print(f'!!Dropping db "{MONGO_COLLECTION_TEAM_DATA}" for a fresh start!!')
+    print(f'!!Dropping collection "{MONGO_COLLECTION_TEAM_DATA}" for a fresh start!!')
     database.drop_collection(MONGO_COLLECTION_TEAM_DATA)
 
 # DEBUG: nuke the "stats for the current season" collection
 if DEBUG_RESET_COLLECTION__CURRENT_SEASON:
-    print(f'!!Dropping db "{CURRENT_SEASON}" for a fresh start!!')
-    database.drop_collection(MONGO_COLLECTION_STANDINGS)
+    print(f'!!Dropping collection "{MONGO_COLLECTION_CURRENT_SEASON}" for a fresh start!!')
+    database.drop_collection(MONGO_COLLECTION_CURRENT_SEASON)
 
 
 print()
 
 # build simplified standings info documents and add them to the database
 collection_teams_data = database[MONGO_COLLECTION_TEAM_DATA]
-collection_team_standings = database[CURRENT_SEASON]
+collection_team_standings = database[MONGO_COLLECTION_CURRENT_SEASON]
 
 # grab the standings for all the days in the given month of the given year
 print()
