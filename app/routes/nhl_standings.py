@@ -1,4 +1,6 @@
 import logging
+from typing import Optional
+
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from app.schemas import TeamStanding
@@ -41,6 +43,8 @@ except Exception as e:
 # MISC
 LOGOS_DIR = "logos"
 
+# FIXME: right now, `today` is only fetched once; it needs to be fetched fresh with every query,
+#        otherwise `today` actually means `the day the server was launched`
 from datetime import datetime
 today = datetime.today().strftime('%Y-%m-%d')
 
@@ -65,15 +69,12 @@ async def get_image(logo_filename: str = "DET_light.svg"):
 # ROUTE:  "/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
-async def get_nhl_standings(start_date: str = today, end_date:str = today):
+async def get_nhl_standings(start_date: str = today, end_date:str = today, teams:Optional[str]=None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
-
-    logging.info(f"ROUTE: /nhl_standings  --  start_date={start_date}, end_date={end_date}")
+    logging.info(f"ROUTE: /nhl_standings  --  start_date={start_date}, end_date={end_date}, teams={teams}")
 
     db_nhl_stats = mongo_client[MONGO_DB_NAME]
-    db_teams_data = db_nhl_stats[TEAM_DATA]
     collection_team_standings = db_nhl_stats[CURRENT_SEASON]
-    target_teams = ['Detroit Red Wings', 'Toronto Maple Leafs']
 
     pipeline = []
     pipeline.append(
@@ -87,14 +88,10 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today):
         }
     )
     pipeline.append(
-        {
-            "$unwind": "$team_info"
-        }
+        { "$unwind": "$team_info" }
     )
     pipeline.append(
-        {
-            "$sort": { "date": 1 }
-        }
+        { "$sort": {"date": 1}}
     )
     pipeline.append(
         {
@@ -111,6 +108,23 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today):
             "$unwind": "$team_data"
         }
     )
+
+    if teams is not None:
+        team_abbrevs = teams.split(',')
+        pipeline.append(
+            {
+                "$match": {
+                    "team_info.abbrev.default": {
+                        "$in": team_abbrevs
+                    }
+                }
+            }
+        )
+
+    pipeline.append(
+        { "$sort": {"team_info.abbrev.default": 1, "date": 1 }}
+    )
+
     pipeline.append(
         {
             "$project": {
