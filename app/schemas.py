@@ -2,6 +2,19 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional
 
+
+class TeamInfo(BaseModel):
+    # _id: int,
+    team_abbrev: str
+    team_name: str
+    team_common_name: str
+    logo: str
+    conference_name: str
+    conference_abbrev: str
+    division_name: str
+    division_abbrev: str
+
+
 class TeamStanding(BaseModel):
     # _id: int
     date: str
@@ -18,6 +31,10 @@ class TeamStanding(BaseModel):
     goal_diff: int
 
 
+
+#################################################################
+# ..examples from the original travershy fastapi tutorial..
+#
 class IssueStatus(str, Enum):
     open = "open"
     in_progress = "in_progress"
