@@ -37,8 +37,8 @@ LOCAL_IMAGE_FOLDER = "..\\..\\logos"
 # constants for talking to the NHL API
 #
 # current season: 2025/2026
-#     start date: 10/07/2025
-#       end date: 04/19/2026
+#     start date: 10-07-2025
+#       end date: 04-19-2026
 nhl_client = NHLClient()
 
 MONTHS_AND_YEARS = [
@@ -112,6 +112,9 @@ def farm_standings_for_month(year, month):
     # suss out what the last day of the given month is; monthrange is clever enough to account for leap years
     last_day_in_month = monthrange(year, month)[1]
 
+    if DEBUG_VERBOSE:
+        print(f"..last_day_in_month: {last_day_in_month}")
+
     # build an appropriately-shaped 'target date' and ask the NHL API for the league standings on that day
     daily_standings_for_the_entire_month = []
     range_start = (
@@ -119,7 +122,7 @@ def farm_standings_for_month(year, month):
     )
 
     today = date.today()
-    for day in range(range_start, last_day_in_month):
+    for day in range(range_start, last_day_in_month + 1):
         target_date_string = f"{year}-{month:02d}-{day:02d}"
         print(f"  ..{target_date_string}", end="")
 
