@@ -56,7 +56,7 @@ today = datetime.today().strftime('%Y-%m-%d')
 # FIXME: THE DEFAULT LOG WOULD MORE APPROPRIATELY BE THE NHL LOGO
 #
 @router.get("/logos")
-async def get_image(logo_filename: str = "DET_light.svg"):
+async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
     image_path = Path(LOGOS_DIR, logo_filename)
     logging.info(f"ROUTE: /nhl_standings/logos  --  logo_filename={logo_filename}")
     logging.info(f"       image_path={image_path.__str__()}")

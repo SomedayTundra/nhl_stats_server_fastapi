@@ -27,6 +27,9 @@ MONGO_URI = MONGO_URI_LOCALHOST
 MONGO_DB_NAME = "nhl_stats"
 MONGO_COLLECTION_TEAM_DATA = "team_data"
 
+# FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
+#        OR, SHOULD WE CLOSE THESE ONE-OFF CONNECTIONS EACH TIME WE'RE DONE PROCESSING A REQUEST?
+#
 mongo_client = MongoClient(MONGO_URI)
 try:
     # connect to MongoDB
@@ -44,7 +47,6 @@ LOGOS_DIR = "logos"
 # ROUTE:  "/nhl_team_info/logos"
 #
 # FIXME: MOVE THIS "logos" route INTO ITS OWN FILE
-# FIXME: THE DEFAULT LOGO WOULD MORE APPROPRIATELY BE THE NHL LOGO
 #
 @router.get("/logos")
 async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
@@ -64,10 +66,22 @@ async def get_nhl_standings(teams:Optional[str]=None):
     db_nhl_stats = mongo_client[MONGO_DB_NAME]
     collection_teams_data = db_nhl_stats[MONGO_COLLECTION_TEAM_DATA]
 
-    """Retrieve all team standings data from the start date to the end date, inclusive"""
+    """Retrieve all team info data, either for the teams specified by the comma-separated list of team abbreviations, or for all teams"""
     logging.info(f"ROUTE: /nhl_team_info  --  teams={teams}")
 
     pipeline = []
+    if teams is not None:
+        team_abbrevs = teams.split(',')
+        pipeline.append(
+            {
+                "$match": {
+                    "teamAbbrev": {
+                        "$in": team_abbrevs
+                    }
+                }
+            }
+        )
+
     pipeline.append(
         { "$sort": {"conferenceName": 1, "divisionName": 1, "teamAbbrev": 1}}
     )
