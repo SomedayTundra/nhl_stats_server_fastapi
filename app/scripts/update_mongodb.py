@@ -171,9 +171,6 @@ if DEBUG_RESET_COLLECTION__CURRENT_SEASON:
     print(f'!!Dropping collection "{MONGO_COLLECTION_CURRENT_SEASON}" for a fresh start!!')
     database.drop_collection(MONGO_COLLECTION_CURRENT_SEASON)
 
-
-print()
-
 # build simplified standings info documents and add them to the database
 collection_teams_data = database[MONGO_COLLECTION_TEAM_DATA]
 collection_team_standings = database[MONGO_COLLECTION_CURRENT_SEASON]
