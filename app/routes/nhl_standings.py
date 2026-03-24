@@ -43,10 +43,9 @@ except Exception as e:
 # MISC
 LOGOS_DIR = "logos"
 
-# FIXME: right now, `today` is only fetched once; it needs to be fetched fresh with every query,
-#        otherwise `today` actually means `the day the server was launched`
 from datetime import datetime
-today = datetime.today().strftime('%Y-%m-%d')
+def fresh_today():
+    return datetime.today().strftime('%Y-%m-%d')
 
 
 ############################
@@ -69,7 +68,7 @@ async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
 # ROUTE:  "/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
-async def get_nhl_standings(start_date: str = today, end_date:str = today, teams:Optional[str]=None):
+async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (fresh_today()), teams: Optional[str] = None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
     logging.info(f"ROUTE: /nhl_standings  --  start_date={start_date}, end_date={end_date}, teams={teams}")
 
@@ -88,10 +87,10 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today, teams
         }
     )
     pipeline.append(
-        { "$unwind": "$team_info" }
+        {"$unwind": "$team_info"}
     )
     pipeline.append(
-        { "$sort": {"date": 1}}
+        {"$sort": {"date": 1}}
     )
     pipeline.append(
         {
@@ -122,7 +121,7 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today, teams
         )
 
     pipeline.append(
-        { "$sort": {"team_info.abbrev.default": 1, "date": 1 }}
+        {"$sort": {"team_info.abbrev.default": 1, "date": 1}}
     )
 
     pipeline.append(
@@ -153,18 +152,18 @@ async def get_nhl_standings(start_date: str = today, end_date:str = today, teams
 
         new_team_standing = TeamStanding(
             # _id = -1,
-            date = entry_date,
-            team_name = entry["team_name"],
-            team_abbrev = entry["team_abbrev"],
-            team_common_name = entry["team_common_name"],
-            logo = entry["logo"],
-            wins = entry["wins"],
-            losses = entry["losses"],
-            ot_losses = entry["ot_losses"],
-            points = entry["points"],
-            goals_for = entry["goals_for"],
-            goals_against = entry["goals_against"],
-            goal_diff = entry["goal_diff"],
+            date=entry_date,
+            team_name=entry["team_name"],
+            team_abbrev=entry["team_abbrev"],
+            team_common_name=entry["team_common_name"],
+            logo=entry["logo"],
+            wins=entry["wins"],
+            losses=entry["losses"],
+            ot_losses=entry["ot_losses"],
+            points=entry["points"],
+            goals_for=entry["goals_for"],
+            goals_against=entry["goals_against"],
+            goal_diff=entry["goal_diff"],
         )
         team_standing_results.append(new_team_standing)
 

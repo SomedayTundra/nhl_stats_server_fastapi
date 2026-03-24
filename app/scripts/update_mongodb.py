@@ -1,5 +1,6 @@
 import os
 from datetime import date
+from typing import Any
 
 import requests
 from nhlpy import NHLClient
@@ -9,8 +10,8 @@ from calendar import monthrange
 ############################################
 # DEBUG FLAGS
 
-# if True, we nuke and rebuild the f"{CURRENT_SEASON}" collection
-DEBUG_RESET_COLLECTION__CURRENT_SEASON = False
+# if True, we nuke and rebuild the f"{MONGO_COLLECTION_TEAM_STANDINGS}" collection
+DEBUG_RESET_COLLECTION__TEAM_STANDINGS = False
 
 # if True, we nuke and rebuild the 'team_data' collection
 DEBUG_RESET_COLLECTION__TEAM_DATA = False
@@ -19,7 +20,7 @@ DEBUG_RESET_COLLECTION__TEAM_DATA = False
 DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
 
 # if True, more verbose debug output is included
-DEBUG_VERBOSE = True
+DEBUG_VERBOSE = False
 
 ############################################
 
@@ -29,8 +30,7 @@ MONGO_URI = MONGO_URI_LOCALHOST
 
 MONGO_DB_NAME_NHL_STATS = "nhl_stats"
 MONGO_COLLECTION_TEAM_DATA = "team_data"
-MONGO_COLLECTION_CURRENT_SEASON = "season_20252026"
-
+MONGO_COLLECTION_TEAM_STANDINGS = "team_standings"
 
 LOCAL_IMAGE_FOLDER = "..\\..\\logos"
 
@@ -41,7 +41,7 @@ LOCAL_IMAGE_FOLDER = "..\\..\\logos"
 #       end date: 04-19-2026
 nhl_client = NHLClient()
 
-MONTHS_AND_YEARS = [
+CURRENT_SEASON_MONTHS_AND_YEARS = [
     (2025, 10),
     (2025, 11),
     (2025, 12),
@@ -50,7 +50,6 @@ MONTHS_AND_YEARS = [
     (2026, 3),
     (2026, 4),
 ]
-
 
 
 def get_image_name_from_image_url(remote_image_url):
@@ -81,16 +80,8 @@ def does_local_image_exist(image_url, local_save_folder=LOCAL_IMAGE_FOLDER):
 
 
 def save_image_file(image_url, local_save_folder=LOCAL_IMAGE_FOLDER):
-    image_name = get_image_name_from_image_url(image_url)
-
-    # get the image name from the end of the URL
-    # image_name = image_url.split("/")[-1]
-
-    # some images, like logos, are SVG files, which can be parameterized using internal JS
-    # so we'll strip off any trailing URL query parameters
-    # image_name = image_name.split("?")[0]
-
     # send a GET request to the image URL
+    image_name = get_image_name_from_image_url(image_url)
     response = requests.get(image_url, stream=True)
 
     if response.status_code == 200:
@@ -132,59 +123,32 @@ def farm_standings_for_month(year, month):
             print(f" ....{target_date} is greater than today ({today}), so we're done!")
             break
 
-        # if we already have data for this day, skip it
-        find_one_result = collection_team_standings.find_one({"date": target_date_string})
-        if find_one_result:
-            print(" ..Data already exists in our database for this day, moving on..")
-        else:
-            daily_standings = nhl_client.standings.league_standings(date=target_date_string)
-
-            if not daily_standings["standings"]:
-                print(" ..(no games on this day)")
-            else:
-                print(" ..Data acquired!")
-                daily_standings_for_the_entire_month.append(daily_standings)
+        farm_standings_for_day(daily_standings_for_the_entire_month, target_date_string)
 
     return daily_standings_for_the_entire_month
 
 
-########################################
-# SCRIPT EXECUTION STARTS HERE
-########################################
-mongo_client = MongoClient(MONGO_URI)
-try:
-    # connect to MongoDB
-    print(f"Attempting to connect to: {MONGO_URI}")
-    mongo_client.admin.command("ping")
-    print(f"Connected successfully [{mongo_client.address}]")
-    database = mongo_client[MONGO_DB_NAME_NHL_STATS]
-except Exception as e:
-    raise Exception("  The following error occurred: ", e)
+def farm_standings_for_day(standings_list: list[Any], target_date_string: str):
+    # if we already have data for this day, skip it
+    find_one_result = collection_team_standings.find_one({"date": target_date_string})
+    if find_one_result:
+        print(" ..Data already exists in our database for this day, moving on..")
+    else:
+        daily_standings = nhl_client.standings.league_standings(date=target_date_string)
 
-# DEBUG: nuke the team data collection
-if DEBUG_RESET_COLLECTION__TEAM_DATA:
-    print(f'!!Dropping collection "{MONGO_COLLECTION_TEAM_DATA}" for a fresh start!!')
-    database.drop_collection(MONGO_COLLECTION_TEAM_DATA)
+        if not daily_standings["standings"]:
+            print(" ..(no games on this day)")
+        else:
+            print(" ..Data acquired!")
+            standings_list.append(daily_standings)
 
-# DEBUG: nuke the "stats for the current season" collection
-if DEBUG_RESET_COLLECTION__CURRENT_SEASON:
-    print(f'!!Dropping collection "{MONGO_COLLECTION_CURRENT_SEASON}" for a fresh start!!')
-    database.drop_collection(MONGO_COLLECTION_CURRENT_SEASON)
 
-# build simplified standings info documents and add them to the database
-collection_teams_data = database[MONGO_COLLECTION_TEAM_DATA]
-collection_team_standings = database[MONGO_COLLECTION_CURRENT_SEASON]
-
-# grab the standings for all the days in the given month of the given year
-print()
-for year, month in MONTHS_AND_YEARS:
-    standings_for_month = farm_standings_for_month(year, month)
-    for standings_for_day in standings_for_month:
+def store_standings_in_mongo(standings_list: list[Any]):
+    for standings_for_day in standings_list:
+        # all entries have the same date embedded, but 'standings_for_month' inconveniently doesn't have a date field,
+        # so we'll use the date in the first entry
         all_team_stats_on_this_day = standings_for_day["standings"]
-        # all entries have the same date embedded, but 'standings_for_month' inconveniently doesn't, so we'll use the first one
         standings_date = all_team_stats_on_this_day[0]["date"]
-
-        all_team_data = {}
         all_team_standings_on_this_day = {"date": standings_date, "team_info": []}
 
         for team in all_team_stats_on_this_day:
@@ -231,8 +195,46 @@ for year, month in MONTHS_AND_YEARS:
 
         collection_team_standings.insert_one(all_team_standings_on_this_day)
         print(
-            f"\nInserted stats for {all_team_standings_on_this_day['date']} into our database"
+            f"  Inserted stats for {all_team_standings_on_this_day['date']} into our database"
         )
+
+
+########################################
+# SCRIPT EXECUTION STARTS HERE
+########################################
+mongo_client = MongoClient(MONGO_URI)
+try:
+    # connect to MongoDB
+    print(f"Attempting to connect to: {MONGO_URI}")
+    mongo_client.admin.command("ping")
+    print(f"Connected successfully [{mongo_client.address}]")
+    database = mongo_client[MONGO_DB_NAME_NHL_STATS]
+except Exception as e:
+    raise Exception("  The following error occurred: ", e)
+
+########################################
+# DEBUG: possibly nuke the team data collection
+if DEBUG_RESET_COLLECTION__TEAM_DATA:
+    print(f'!!Dropping collection "{MONGO_COLLECTION_TEAM_DATA}" for a fresh start!!')
+    database.drop_collection(MONGO_COLLECTION_TEAM_DATA)
+
+# DEBUG: possibly nuke the "stats for the current season" collection
+if DEBUG_RESET_COLLECTION__TEAM_STANDINGS:
+    print(f'!!Dropping collection "{MONGO_COLLECTION_TEAM_STANDINGS}" for a fresh start!!')
+    database.drop_collection(MONGO_COLLECTION_TEAM_STANDINGS)
+#
+########################################
+
+# create simplified teams_data and team_standings documents
+collection_teams_data = database[MONGO_COLLECTION_TEAM_DATA]
+collection_team_standings = database[MONGO_COLLECTION_TEAM_STANDINGS]
+
+# grab the standings for all the days in the given month of the given year
+print()
+
+for current_season_year, current_season_month in CURRENT_SEASON_MONTHS_AND_YEARS:
+    standings_for_month = farm_standings_for_month(current_season_year, current_season_month)
+    store_standings_in_mongo(standings_for_month)
 
     # all done; how about a blank line?
     print()

@@ -8,7 +8,7 @@ MONGO_DB_NAME_NHL_STATS = "nhl_stats"
 MONGO_COLLECTION_TEAM_DATA = "team_data"
 MONGO_COLLECTION_STANDINGS = "standings"
 
-CURRENT_SEASON = "season_20252026"
+TEAM_STANDINGS = "team_standings"
 
 
 ########################################
@@ -31,7 +31,7 @@ database.drop_collection(MONGO_COLLECTION_TEAM_DATA)
 
 # nuke the data for Oct26th, just so have a valid day to fetch, which will trigger a team_data refresh
 print(f'--Deleting team standings data for Oct 26, 2025')
-collection_team_standings = database[CURRENT_SEASON]
+collection_team_standings = database[TEAM_STANDINGS]
 collection_team_standings.delete_one({"date": "2025-10-26"})
 
 print("END")
