@@ -25,10 +25,9 @@ MONGO_URI_LOCALHOST = "mongodb://localhost:27017/"
 MONGO_URI = MONGO_URI_LOCALHOST
 
 MONGO_DB_NAME = "nhl_stats"
-MONGO_COLLECTION_STANDINGS = "standings"
 
 TEAM_DATA = "team_data"
-CURRENT_SEASON = "season_20252026"
+TEAM_STANDINGS = "team_standings"
 
 mongo_client = MongoClient(MONGO_URI)
 try:
@@ -73,7 +72,7 @@ async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (
     logging.info(f"ROUTE: /nhl_standings  --  start_date={start_date}, end_date={end_date}, teams={teams}")
 
     db_nhl_stats = mongo_client[MONGO_DB_NAME]
-    collection_team_standings = db_nhl_stats[CURRENT_SEASON]
+    collection_team_standings = db_nhl_stats[TEAM_STANDINGS]
 
     pipeline = []
     pipeline.append(

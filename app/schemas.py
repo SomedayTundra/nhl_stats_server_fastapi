@@ -31,7 +31,6 @@ class TeamStanding(BaseModel):
     goal_diff: int
 
 
-
 #################################################################
 # ..examples from the original travershy fastapi tutorial..
 #

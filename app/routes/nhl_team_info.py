@@ -46,7 +46,7 @@ LOGOS_DIR = "logos"
 ############################
 # ROUTE:  "/nhl_team_info/logos"
 #
-# FIXME: MOVE THIS "logos" route INTO ITS OWN FILE
+# FIXME: MOVE THIS "logos" route INTO ITS OWN FILE?
 #
 @router.get("/logos")
 async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
@@ -59,10 +59,19 @@ async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
 
 
 ############################
+# ROUTE:  "/nhl_team_info/get_all_abbrevs"
+#
+@router.get("/get_all_abbrevs", response_model=list[str])
+async def get_all_abbrevs():
+    all_team_info = await get_nhl_team_info()
+    return map(lambda team_info: team_info.team_abbrev , all_team_info)
+
+
+############################
 # ROUTE:  "/nhl_team_info"
 #
 @router.get("/", response_model=list[TeamInfo])
-async def get_nhl_standings(teams:Optional[str]=None):
+async def get_nhl_team_info(teams:Optional[str]=None) -> list[TeamInfo]:
     db_nhl_stats = mongo_client[MONGO_DB_NAME]
     collection_teams_data = db_nhl_stats[MONGO_COLLECTION_TEAM_DATA]
 
