@@ -28,7 +28,7 @@ class TeamInfo(CamelModel):
     division_abbrev: str
 
 
-class TeamStanding(BaseModel):
+class TeamStanding(CamelModel):
     # _id: int
     date: str
     team_name: str
