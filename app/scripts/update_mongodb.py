@@ -7,6 +7,8 @@ from nhlpy import NHLClient
 from pymongo import MongoClient
 from calendar import monthrange
 
+import mongo_db_constants as mongo
+
 ############################################
 # DEBUG FLAGS
 
@@ -23,14 +25,6 @@ DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
 DEBUG_VERBOSE = False
 
 ############################################
-
-# constants for talking to the MongoDB instance
-MONGO_URI_LOCALHOST = "mongodb://localhost:27017/"
-MONGO_URI = MONGO_URI_LOCALHOST
-
-MONGO_DB_NAME_NHL_STATS = "nhl_stats"
-MONGO_COLLECTION_TEAM_DATA = "team_data"
-MONGO_COLLECTION_TEAM_STANDINGS = "team_standings"
 
 LOCAL_IMAGE_FOLDER = "..\\..\\logos"
 
@@ -202,32 +196,32 @@ def store_standings_in_mongo(standings_list: list[Any]):
 ########################################
 # SCRIPT EXECUTION STARTS HERE
 ########################################
-mongo_client = MongoClient(MONGO_URI)
+mongo_client = MongoClient(mongo.URI)
 try:
     # connect to MongoDB
-    print(f"Attempting to connect to: {MONGO_URI}")
+    print(f"Attempting to connect to: {mongo.URI}")
     mongo_client.admin.command("ping")
     print(f"Connected successfully [{mongo_client.address}]")
-    database = mongo_client[MONGO_DB_NAME_NHL_STATS]
+    database = mongo_client[mongo.DB_NAME_NHL_STATS]
 except Exception as e:
     raise Exception("  The following error occurred: ", e)
 
 ########################################
 # DEBUG: possibly nuke the team data collection
 if DEBUG_RESET_COLLECTION__TEAM_DATA:
-    print(f'!!Dropping collection "{MONGO_COLLECTION_TEAM_DATA}" for a fresh start!!')
-    database.drop_collection(MONGO_COLLECTION_TEAM_DATA)
+    print(f'!!Dropping collection "{mongo.COLLECTION_TEAM_DATA}" for a fresh start!!')
+    database.drop_collection(mongo.COLLECTION_TEAM_DATA)
 
 # DEBUG: possibly nuke the "stats for the current season" collection
 if DEBUG_RESET_COLLECTION__TEAM_STANDINGS:
-    print(f'!!Dropping collection "{MONGO_COLLECTION_TEAM_STANDINGS}" for a fresh start!!')
-    database.drop_collection(MONGO_COLLECTION_TEAM_STANDINGS)
+    print(f'!!Dropping collection "{mongo.COLLECTION_TEAM_STANDINGS}" for a fresh start!!')
+    database.drop_collection(mongo.COLLECTION_TEAM_STANDINGS)
 #
 ########################################
 
 # create simplified teams_data and team_standings documents
-collection_teams_data = database[MONGO_COLLECTION_TEAM_DATA]
-collection_team_standings = database[MONGO_COLLECTION_TEAM_STANDINGS]
+collection_teams_data = database[mongo.COLLECTION_TEAM_DATA]
+collection_team_standings = database[mongo.COLLECTION_TEAM_STANDINGS]
 
 # grab the standings for all the days in the given month of the given year
 print()
@@ -242,7 +236,7 @@ for current_season_year, current_season_month in CURRENT_SEASON_MONTHS_AND_YEARS
 # all done; close the connection to the database
 try:
     # close the connection to MongoDB
-    print(f"Closing connection to: {MONGO_URI}")
+    print(f"Closing connection to: {mongo.URI}")
     mongo_client.close()
 except Exception as e:
     raise Exception("  The following error occurred: ", e)
