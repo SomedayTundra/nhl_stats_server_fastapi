@@ -42,3 +42,9 @@ class TeamStanding(CamelModel):
     goals_for: int
     goals_against: int
     goal_diff: int
+
+class UserData(CamelModel):
+    # _id: int
+    user: str
+    start_date: str
+    end_date: str

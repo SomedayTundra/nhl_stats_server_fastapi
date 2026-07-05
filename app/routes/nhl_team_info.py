@@ -21,19 +21,15 @@ router = APIRouter(prefix="/api/nhl_team_info", tags=["nhl_team_info"])
 ############################
 # MONGO DB CLIENT
 #
-MONGO_URI_LOCALHOST = "mongodb://localhost:27017/"
-MONGO_URI = MONGO_URI_LOCALHOST
-
-MONGO_DB_NAME = "nhl_stats"
-MONGO_COLLECTION_TEAM_DATA = "team_data"
+import mongo_db_constants as mongo
 
 # FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
 #        OR, SHOULD WE CLOSE THESE ONE-OFF CONNECTIONS EACH TIME WE'RE DONE PROCESSING A REQUEST?
 #
-mongo_client = MongoClient(MONGO_URI)
+mongo_client = MongoClient(mongo.URI)
 try:
     # connect to MongoDB
-    logging.info(f"Attempting to connect to: {MONGO_URI}")
+    logging.info(f"Attempting to connect to: {mongo.URI}")
     mongo_client.admin.command("ping")
     logging.info(f"Connected successfully [{mongo_client.address}]")
 except Exception as e:
@@ -72,8 +68,8 @@ async def get_all_abbrevs():
 #
 @router.get("/", response_model=list[TeamInfo])
 async def get_nhl_team_info(teams:Optional[str]=None) -> list[TeamInfo]:
-    db_nhl_stats = mongo_client[MONGO_DB_NAME]
-    collection_teams_data = db_nhl_stats[MONGO_COLLECTION_TEAM_DATA]
+    db_nhl_stats = mongo_client[mongo.DB_NAME_NHL_STATS]
+    collection_teams_data = db_nhl_stats[mongo.COLLECTION_TEAM_DATA]
 
     """Retrieve all team info data, either for the teams specified by the comma-separated list of team abbreviations, or for all teams"""
     logging.info(f"ROUTE: /nhl_team_info  --  teams={teams}")
