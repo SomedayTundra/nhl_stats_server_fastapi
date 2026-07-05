@@ -45,7 +45,6 @@ LOGOS_DIR = "logos"
 @router.get("/logo")
 async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
     image_path = Path(LOGOS_DIR, logo_filename)
-    logging.info(f"image_path: {image_path.__str__()}")
     if not image_path.is_file():
         return {"error": f"logo not found on the server: {logo_filename}"}
     return FileResponse(image_path)
