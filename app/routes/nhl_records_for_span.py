@@ -32,6 +32,9 @@ MONGO_COLLECTION_STANDINGS = "standings"
 TEAM_DATA = "team_data"
 TEAM_STANDINGS = "team_standings"
 
+# FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
+#        YES--SEE [NHL-35]
+#
 mongo_client = MongoClient(MONGO_URI)
 try:
     # connect to MongoDB
@@ -43,26 +46,18 @@ except Exception as e:
 
 ############################
 # MISC
-LOGOS_DIR = "logos"
-
 from datetime import datetime, timedelta
-
-
 def fresh_today(delta=0):
-    '''Return a current value for "today," optionally subtracting 'delta' number of days to go back in time.'''
+    """Return a current value for "today," optionally subtracting 'delta' number of days to go back in time."""
     return (datetime.today() - timedelta(delta)).strftime('%Y-%m-%d')
 
 
 ############################
-# ROUTE:  "/nhl_standings"
+# ROUTE:  "/api/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
 async def get_nhl_records_for_span(start_date: str = (fresh_today(14)), end_date: str = (fresh_today()), teams: list[str] = ["DET", "OTT", "BOS", "COL", "TOR"]):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
-    logging.info(f"ROUTE: /nhl_records_for_span  --  start_date={start_date}, end_date={end_date}, teams={teams}")
-
-    team_records_for_span = []
-
     db_nhl_stats = mongo_client[MONGO_DB_NAME]
     collection_team_standings = db_nhl_stats[TEAM_STANDINGS]
 
@@ -144,7 +139,6 @@ async def get_nhl_records_for_span(start_date: str = (fresh_today(14)), end_date
         entry_date = entry["date"]
 
         new_team_standing = TeamStanding(
-            # _id = -1,
             date=entry_date,
             team_name=entry["team_name"],
             team_abbrev=entry["team_abbrev"],

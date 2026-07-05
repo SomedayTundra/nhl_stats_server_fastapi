@@ -2,11 +2,9 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter
-from fastapi.responses import FileResponse
-from app.schemas import TeamStanding
 from pymongo import MongoClient
-from pathlib import Path
 
+from app.schemas import TeamStanding
 
 ############################
 # LOGGING
@@ -21,18 +19,15 @@ router = APIRouter(prefix="/api/nhl_standings", tags=["nhl_standings"])
 ############################
 # MONGO DB CLIENT
 #
-MONGO_URI_LOCALHOST = "mongodb://localhost:27017/"
-MONGO_URI = MONGO_URI_LOCALHOST
+import mongo_db_constants as mongo
 
-MONGO_DB_NAME = "nhl_stats"
-
-TEAM_DATA = "team_data"
-TEAM_STANDINGS = "team_standings"
-
-mongo_client = MongoClient(MONGO_URI)
+# FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
+#        YES--SEE [NHL-35]
+#
+mongo_client = MongoClient(mongo.URI)
 try:
     # connect to MongoDB
-    logging.info(f"Attempting to connect to: {MONGO_URI}")
+    logging.info(f"Attempting to connect to: {mongo.URI}")
     mongo_client.admin.command("ping")
     logging.info(f"Connected successfully [{mongo_client.address}]")
 except Exception as e:
@@ -40,39 +35,27 @@ except Exception as e:
 
 ############################
 # MISC
-LOGOS_DIR = "logos"
-
 from datetime import datetime
 def fresh_today():
     return datetime.today().strftime('%Y-%m-%d')
 
 
 ############################
-# ROUTE:  "/nhl_standings/logos"
-#
-# FIXME: MOVE THIS "logos" route INTO ITS OWN FILE
-# FIXME: THE DEFAULT LOG WOULD MORE APPROPRIATELY BE THE NHL LOGO
-#
-@router.get("/logos")
-async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
-    image_path = Path(LOGOS_DIR, logo_filename)
-    logging.info(f"ROUTE: /nhl_standings/logos  --  logo_filename={logo_filename}")
-    logging.info(f"       image_path={image_path.__str__()}")
-    if not image_path.is_file():
-        return {"error": f"logo not found on the server: {logo_filename}"}
-    return FileResponse(image_path)
-
-
-############################
-# ROUTE:  "/nhl_standings"
+# ROUTE:  "/api/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
 async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (fresh_today()), teams: Optional[str] = None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
-    logging.info(f"ROUTE: /nhl_standings  --  start_date={start_date}, end_date={end_date}, teams={teams}")
+    db_nhl_stats = mongo_client[mongo.DB_NAME_NHL_STATS]
+    collection_user_data = db_nhl_stats[mongo.COLLECTION_USER_DATA]
 
-    db_nhl_stats = mongo_client[MONGO_DB_NAME]
-    collection_team_standings = db_nhl_stats[TEAM_STANDINGS]
+    # store the start_date and end_date, so the user's client can always reset whatever date controls
+    # it uses in its UI to the last start and end date that were used (on app refresh, for example)
+    collection_user_data.delete_one({"user": "default"})
+    collection_user_data.insert_one({"user": "default", "start_date": start_date, "end_date": end_date})
+
+    # fetch the data the user wanted, team standings info from start_date => end_date
+    collection_team_standings = db_nhl_stats[mongo.COLLECTION_TEAM_STANDINGS]
 
     pipeline = []
     pipeline.append(
@@ -150,7 +133,6 @@ async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (
         entry_date = entry["date"]
 
         new_team_standing = TeamStanding(
-            # _id = -1,
             date=entry_date,
             team_name=entry["team_name"],
             team_abbrev=entry["team_abbrev"],
