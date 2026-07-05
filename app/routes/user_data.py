@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/user_data", tags=["user_data"])
 import mongo_db_constants as mongo
 
 # FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
-#        OR, SHOULD WE CLOSE THESE ONE-OFF CONNECTIONS EACH TIME WE'RE DONE PROCESSING A REQUEST?
+#        YES--SEE [NHL-35]
 #
 mongo_client = MongoClient(mongo.URI)
 try:
@@ -34,15 +34,13 @@ except Exception as e:
     raise Exception("  The following error occurred: ", e)
 
 ############################
-# ROUTE:  "/user_data"
+# ROUTE:  "/api/user_data/"
 #
 @router.get("/", response_model=list[UserData])
 async def get_user_data(users:Optional[str]=None) -> list[UserData]:
+    """Retrieve all user data, either for the users specified by the comma-separated list of user names, or for all teams"""
     db_nhl_stats = mongo_client[mongo.DB_NAME_NHL_STATS]
     collection_user_data = db_nhl_stats[mongo.COLLECTION_USER_DATA]
-
-    """Retrieve all user data, either for the users specified by the comma-separated list of user names, or for all teams"""
-    logging.info(f"ROUTE: /user_data  --  users={users}")
 
     pipeline = []
     if users is not None:
@@ -57,28 +55,11 @@ async def get_user_data(users:Optional[str]=None) -> list[UserData]:
             }
         )
 
-    # pipeline.append(
-    #     {
-    #         "$project": {
-    #             "_id": 1,
-    #             "team_abbrev": '$teamAbbrev',
-    #             "team_name": '$teamName',
-    #             "team_common_name": '$teamCommonName',
-    #             "logo": '$localLogo',
-    #             "conference_name": "$conferenceName",
-    #             "conference_abbrev": "$conferenceAbbrev",
-    #             "division_name": "$divisionName",
-    #             "division_abbrev": "$divisionAbbrev"
-    #         }
-    #     }
-    # )
-
     results = collection_user_data.aggregate(pipeline)
 
     user_data_results = []
     for entry in results:
         new_user_data = UserData (
-            # _id = -1,
             user = entry["user"],
             start_date = entry["start_date"],
             end_date = entry["end_date"],

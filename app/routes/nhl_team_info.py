@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/nhl_team_info", tags=["nhl_team_info"])
 import mongo_db_constants as mongo
 
 # FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
-#        OR, SHOULD WE CLOSE THESE ONE-OFF CONNECTIONS EACH TIME WE'RE DONE PROCESSING A REQUEST?
+#        YES--SEE [NHL-35]
 #
 mongo_client = MongoClient(mongo.URI)
 try:
@@ -40,15 +40,12 @@ except Exception as e:
 LOGOS_DIR = "logos"
 
 ############################
-# ROUTE:  "/nhl_team_info/logos"
+# ROUTE:  "/nhl_team_info/logo"
 #
-# FIXME: MOVE THIS "logos" route INTO ITS OWN FILE?
-#
-@router.get("/logos")
+@router.get("/logo")
 async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
     image_path = Path(LOGOS_DIR, logo_filename)
-    logging.info(f"ROUTE: /nhl_team_info/logos  --  logo_filename={logo_filename}")
-    logging.info(f"       image_path={image_path.__str__()}")
+    logging.info(f"image_path: {image_path.__str__()}")
     if not image_path.is_file():
         return {"error": f"logo not found on the server: {logo_filename}"}
     return FileResponse(image_path)
@@ -72,8 +69,6 @@ async def get_nhl_team_info(teams:Optional[str]=None) -> list[TeamInfo]:
     collection_teams_data = db_nhl_stats[mongo.COLLECTION_TEAM_DATA]
 
     """Retrieve all team info data, either for the teams specified by the comma-separated list of team abbreviations, or for all teams"""
-    logging.info(f"ROUTE: /nhl_team_info  --  teams={teams}")
-
     pipeline = []
     if teams is not None:
         team_abbrevs = teams.split(',')
@@ -111,7 +106,6 @@ async def get_nhl_team_info(teams:Optional[str]=None) -> list[TeamInfo]:
     team_info_results = []
     for entry in results:
         new_team_info = TeamInfo (
-            # _id = -1,
             team_abbrev = entry["team_abbrev"],
             team_name = entry["team_name"],
             team_common_name = entry["team_common_name"],
