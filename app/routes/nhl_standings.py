@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter
-from pymongo import MongoClient
 
 from app.schemas import TeamStanding
 
@@ -21,18 +20,6 @@ router = APIRouter(prefix="/api/nhl_standings", tags=["nhl_standings"])
 #
 import mongo_db_constants as mongo
 
-# FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
-#        YES--SEE [NHL-35]
-#
-mongo_client = MongoClient(mongo.URI)
-try:
-    # connect to MongoDB
-    logging.info(f"Attempting to connect to: {mongo.URI}")
-    mongo_client.admin.command("ping")
-    logging.info(f"Connected successfully [{mongo_client.address}]")
-except Exception as e:
-    raise Exception("  The following error occurred: ", e)
-
 ############################
 # MISC
 from datetime import datetime
@@ -46,7 +33,7 @@ def fresh_today():
 @router.get("/", response_model=list[TeamStanding])
 async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (fresh_today()), teams: Optional[str] = None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
-    db_nhl_stats = mongo_client[mongo.DB_NAME_NHL_STATS]
+    db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection_user_data = db_nhl_stats[mongo.COLLECTION_USER_DATA]
 
     # store the start_date and end_date, so the user's client can always reset whatever date controls

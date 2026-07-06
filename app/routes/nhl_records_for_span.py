@@ -1,14 +1,8 @@
 import logging
-from typing import Optional
 
 from fastapi import APIRouter
-from fastapi.responses import FileResponse
-from pymongo import MongoClient
-from pathlib import Path
 
 from app.schemas import TeamStanding
-from app.routes.nhl_team_info import get_all_abbrevs
-
 
 ############################
 # LOGGING
@@ -23,26 +17,7 @@ router = APIRouter(prefix="/api/nhl_records_for_span", tags=["nhl_records_for_sp
 ############################
 # MONGO DB CLIENT
 #
-MONGO_URI_LOCALHOST = "mongodb://localhost:27017/"
-MONGO_URI = MONGO_URI_LOCALHOST
-
-MONGO_DB_NAME = "nhl_stats"
-MONGO_COLLECTION_STANDINGS = "standings"
-
-TEAM_DATA = "team_data"
-TEAM_STANDINGS = "team_standings"
-
-# FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
-#        YES--SEE [NHL-35]
-#
-mongo_client = MongoClient(MONGO_URI)
-try:
-    # connect to MongoDB
-    logging.info(f"Attempting to connect to: {MONGO_URI}")
-    mongo_client.admin.command("ping")
-    logging.info(f"Connected successfully [{mongo_client.address}]")
-except Exception as e:
-    raise Exception("  The following error occurred: ", e)
+import mongo_db_constants as mongo
 
 ############################
 # MISC
@@ -58,8 +33,8 @@ def fresh_today(delta=0):
 @router.get("/", response_model=list[TeamStanding])
 async def get_nhl_records_for_span(start_date: str = (fresh_today(14)), end_date: str = (fresh_today()), teams: list[str] = ["DET", "OTT", "BOS", "COL", "TOR"]):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
-    db_nhl_stats = mongo_client[MONGO_DB_NAME]
-    collection_team_standings = db_nhl_stats[TEAM_STANDINGS]
+    db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
+    collection_team_standings = db_nhl_stats[mongo.COLLECTION_TEAM_STANDINGS]
 
     pipeline = []
     pipeline.append(

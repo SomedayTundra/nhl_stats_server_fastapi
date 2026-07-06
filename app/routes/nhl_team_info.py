@@ -1,12 +1,11 @@
 import logging
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
-from app.schemas import TeamInfo
-from pymongo import MongoClient
-from pathlib import Path
 
+from app.schemas import TeamInfo
 
 ############################
 # LOGGING
@@ -22,18 +21,6 @@ router = APIRouter(prefix="/api/nhl_team_info", tags=["nhl_team_info"])
 # MONGO DB CLIENT
 #
 import mongo_db_constants as mongo
-
-# FIXME: SHOULD WE ONLY CONNECT ONCE AND RE-USE THAT CONNECTION FOR ALL ROUTES?
-#        YES--SEE [NHL-35]
-#
-mongo_client = MongoClient(mongo.URI)
-try:
-    # connect to MongoDB
-    logging.info(f"Attempting to connect to: {mongo.URI}")
-    mongo_client.admin.command("ping")
-    logging.info(f"Connected successfully [{mongo_client.address}]")
-except Exception as e:
-    raise Exception("  The following error occurred: ", e)
 
 ############################
 # MISC
@@ -64,7 +51,7 @@ async def get_all_abbrevs():
 #
 @router.get("/", response_model=list[TeamInfo])
 async def get_nhl_team_info(teams:Optional[str]=None) -> list[TeamInfo]:
-    db_nhl_stats = mongo_client[mongo.DB_NAME_NHL_STATS]
+    db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection_teams_data = db_nhl_stats[mongo.COLLECTION_TEAM_DATA]
 
     """Retrieve all team info data, either for the teams specified by the comma-separated list of team abbreviations, or for all teams"""
