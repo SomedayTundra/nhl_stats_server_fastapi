@@ -58,11 +58,12 @@ async def get_nhl_team_info(teams:Optional[str]=None) -> list[TeamInfo]:
     pipeline = []
     if teams is not None:
         team_abbrevs = teams.split(',')
+        capitalized_abbrevs = [a.upper() for a in team_abbrevs] # in the db, all abbrevs are CAPITALIZED
         pipeline.append(
             {
                 "$match": {
                     "teamAbbrev": {
-                        "$in": team_abbrevs
+                        "$in": capitalized_abbrevs
                     }
                 }
             }
