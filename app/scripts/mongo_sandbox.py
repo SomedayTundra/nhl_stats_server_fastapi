@@ -1,3 +1,10 @@
+###################################################
+# USE THIS FILE TO DO PUZZLE OUT SANDBOX QUERIES
+# AGAINST OUR MONGODB, WHEN THE PIPELINE GETS
+# ALL CONFUSING AND STUFF.  😀
+###################################################
+
+
 from pymongo import MongoClient
 
 # constants for talking to the MongoDB instance

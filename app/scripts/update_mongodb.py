@@ -1,3 +1,14 @@
+###################################################
+# CALLS THE "NHL STATS API" TO FARM DATA THAT WE
+# STORE IN OUR MONGODB INSTANCE, WHICH CAN THEN
+# ACCESSED VIA OUR FASTAPI REST INTERFACE TO
+# FUEL OUR WEB CLIENTS
+#
+# TODO: [NHL-22] LOOK INTO USING BEANIE TO SIMPLIFY THIS CODE
+#
+###################################################
+
+
 import os
 from datetime import date
 from typing import Any
