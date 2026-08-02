@@ -24,14 +24,17 @@ import mongo_db_constants as mongo
 # MISC
 from datetime import datetime
 def fresh_today():
-    return datetime.today().strftime('%Y-%m-%d')
+    live_today = datetime.today()
+    return live_today.strftime('%Y-%m-%d')
+
+LAST_DAY_OF_2026_SEASON = '2026-04-17'
 
 
 ############################
 # ROUTE:  "/api/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
-async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (fresh_today()), teams: Optional[str] = None):
+async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date: str = LAST_DAY_OF_2026_SEASON, teams: Optional[str] = None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
     db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection_user_data = db_nhl_stats[mongo.COLLECTION_USER_DATA]
@@ -79,11 +82,12 @@ async def get_nhl_standings(start_date: str = (fresh_today()), end_date: str = (
 
     if teams is not None:
         team_abbrevs = teams.split(',')
+        capitalized_abbrevs = [a.upper() for a in team_abbrevs] # in the db, all abbrevs are CAPITALIZED
         pipeline.append(
             {
                 "$match": {
                     "team_info.abbrev.default": {
-                        "$in": team_abbrevs
+                        "$in": capitalized_abbrevs
                     }
                 }
             }
