@@ -14,6 +14,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:5173",  # The origin for your React app on your local machine/development environment
+    "http://localhost:5174",  # The origin for your React app on your local machine/development environment
     # "https://your-production-frontend.com",
 ]
 
