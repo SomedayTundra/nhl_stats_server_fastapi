@@ -2,7 +2,6 @@ import uvicorn
 from fastapi import FastAPI
 from app.routes.nhl_standings import router as nhl_standings_router
 from app.routes.nhl_team_info import router as nhl_team_info_router
-from app.routes.nhl_records_for_span import router as nhl_records_for_span_router
 from app.routes.user_data import router as user_data_router
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +13,6 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:5173",  # The origin for your React app on your local machine/development environment
-    "http://localhost:5174",  # The origin for your React app on your local machine/development environment
     # "https://your-production-frontend.com",
 ]
 
@@ -30,7 +28,6 @@ app.add_middleware(
 
 app.include_router(nhl_standings_router)            # /api/nhl_standings
 app.include_router(nhl_team_info_router)            # /api/nhl_team_info
-app.include_router(nhl_records_for_span_router)     # /api/nhl_records_for_span
 app.include_router(user_data_router)                # /api/user_data
 
 
