@@ -123,8 +123,8 @@ async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=Non
                 "team_name": '$teamName',
                 "team_common_name": '$teamCommonName',
                 "logo": '$localLogo',
-                "conference_name": "$conferenceName",
-                "conference_abbrev": "$conferenceAbbrev",
+                "conference_name": {"$ifNull": ["$conferenceName", "NA"]},
+                "conference_abbrev": {"$ifNull": ["$conferenceAbbrev", "NA"]},
                 "division_name": "$divisionName",
                 "division_abbrev": "$divisionAbbrev"
             }
@@ -141,8 +141,8 @@ async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=Non
             team_name = entry["team_name"],
             team_common_name = entry["team_common_name"],
             logo = entry["logo"],
-            conference_name = entry["conference_name"],
-            conference_abbrev = entry["conference_abbrev"],
+            conference_name = entry.get("conference_name", "NA"),
+            conference_abbrev = entry.get("conference_abbrev", "NA"),
             division_name = entry["division_name"],
             division_abbrev = entry["division_abbrev"],
         )

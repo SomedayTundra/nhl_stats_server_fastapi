@@ -23,8 +23,8 @@ class TeamInfo(CamelModel):
     team_name: str
     team_common_name: str
     logo: str
-    conference_name: str
-    conference_abbrev: str
+    conference_name: str = "NA"
+    conference_abbrev: str = "NA"
     division_name: str
     division_abbrev: str
 

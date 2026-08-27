@@ -224,8 +224,8 @@ def store_standings_in_mongo(standings_list: list[Any]):
                     {
                         "$push": {
                             "teams": {
-                                "conferenceName": team["conferenceName"],
-                                "conferenceAbbrev": team["conferenceAbbrev"],
+                                "conferenceName": team.get("conferenceName", "NA"),
+                                "conferenceAbbrev": team.get("conferenceAbbrev", "NA"),
                                 "divisionName": team["divisionName"],
                                 "divisionAbbrev": team["divisionAbbrev"],
                                 "placeName": team["placeName"]["default"],
