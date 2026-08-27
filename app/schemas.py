@@ -18,6 +18,7 @@ class CamelModel(BaseModel):
 
 class TeamInfo(CamelModel):
     # _id: int,
+    season_id: int
     team_abbrev: str
     team_name: str
     team_common_name: str
@@ -30,6 +31,7 @@ class TeamInfo(CamelModel):
 
 class TeamStanding(CamelModel):
     # _id: int
+    season_id: int
     date: str
     team_name: str
     team_common_name: str

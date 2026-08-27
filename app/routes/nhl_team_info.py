@@ -50,12 +50,29 @@ async def get_all_abbrevs():
 # ROUTE:  "/nhl_team_info"
 #
 @router.get("/", response_model=list[TeamInfo])
-async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=None, conference:Optional[str]=None) -> list[TeamInfo]:
+async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=None, conference:Optional[str]=None, season_id:Optional[int]=None) -> list[TeamInfo]:
     db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection_teams_data = db_nhl_stats[mongo.COLLECTION_TEAM_DATA]
 
     """Retrieve all team info data, either for the teams specified by the comma-separated list of team abbreviations, or for all teams"""
     pipeline = []
+
+    # pick the requested season, or default to the latest season we have data for
+    if season_id is not None:
+        pipeline.append({"$match": {"seasonId": season_id}})
+    else:
+        pipeline.append({"$sort": {"seasonId": -1}})
+        pipeline.append({"$limit": 1})
+
+    pipeline.append({"$unwind": "$teams"})
+    pipeline.append(
+        {
+            "$replaceRoot": {
+                "newRoot": {"$mergeObjects": ["$teams", {"seasonId": "$seasonId"}]}
+            }
+        }
+    )
+
     if conference is not None:
         conference_abbrevs = conference.split(',')
         capitalized_conference_abbrevs = [a.upper() for a in conference_abbrevs] # in the db, all abbrevs are CAPITALIZED
@@ -101,6 +118,7 @@ async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=Non
         {
             "$project": {
                 "_id": 1,
+                "season_id": '$seasonId',
                 "team_abbrev": '$teamAbbrev',
                 "team_name": '$teamName',
                 "team_common_name": '$teamCommonName',
@@ -118,6 +136,7 @@ async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=Non
     team_info_results = []
     for entry in results:
         new_team_info = TeamInfo (
+            season_id = entry["season_id"],
             team_abbrev = entry["team_abbrev"],
             team_name = entry["team_name"],
             team_common_name = entry["team_common_name"],

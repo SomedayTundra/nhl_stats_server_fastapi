@@ -34,7 +34,7 @@ LAST_DAY_OF_2026_SEASON = '2026-04-17'
 # ROUTE:  "/api/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
-async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date: str = LAST_DAY_OF_2026_SEASON, teams: Optional[str] = None):
+async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date: str = LAST_DAY_OF_2026_SEASON, teams: Optional[str] = None, season_id: Optional[int] = None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
     db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection_user_data = db_nhl_stats[mongo.COLLECTION_USER_DATA]
@@ -47,17 +47,17 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
     # fetch the data the user wanted, team standings info from start_date => end_date
     collection_team_standings = db_nhl_stats[mongo.COLLECTION_TEAM_STANDINGS]
 
-    pipeline = []
-    pipeline.append(
-        {
-            "$match": {
-                "date": {
-                    "$gte": start_date,
-                    "$lte": end_date,
-                }
-            }
+    date_match = {
+        "date": {
+            "$gte": start_date,
+            "$lte": end_date,
         }
-    )
+    }
+    if season_id is not None:
+        date_match["seasonId"] = season_id
+
+    pipeline = []
+    pipeline.append({"$match": date_match})
     pipeline.append(
         {"$unwind": "$team_info"}
     )
@@ -68,8 +68,13 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
         {
             "$lookup": {
                 "from": "team_data",
-                "localField": 'team_info.name',
-                "foreignField": "teamName",
+                "let": {"team_name": "$team_info.name", "season_id": "$seasonId"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$seasonId", "$$season_id"]}}},
+                    {"$unwind": "$teams"},
+                    {"$match": {"$expr": {"$eq": ["$teams.teamName", "$$team_name"]}}},
+                    {"$replaceRoot": {"newRoot": "$teams"}},
+                ],
                 "as": "team_data"
             }
         }
@@ -102,6 +107,7 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
             "$project": {
                 "_id": 1,
                 "date": 1,
+                "season_id": '$seasonId',
                 "team_name": '$team_info.name',
                 "team_common_name": '$team_data.teamCommonName',
                 "team_abbrev": '$team_data.teamAbbrev',
@@ -124,6 +130,7 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
         entry_date = entry["date"]
 
         new_team_standing = TeamStanding(
+            season_id=entry["season_id"],
             date=entry_date,
             team_name=entry["team_name"],
             team_abbrev=entry["team_abbrev"],
