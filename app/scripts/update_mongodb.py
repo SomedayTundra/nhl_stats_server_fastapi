@@ -7,6 +7,7 @@
 ###################################################
 
 
+import argparse
 import os
 from datetime import date
 from typing import Any
@@ -22,12 +23,10 @@ import mongo_db_constants as mongo
 # DEBUG FLAGS
 
 # if True, we nuke and rebuild the f"{MONGO_COLLECTION_TEAM_STANDINGS}" collection
-DEBUG_RESET_COLLECTION__TEAM_STANDINGS = True
-# DEBUG_RESET_COLLECTION__TEAM_STANDINGS = False
+DEBUG_RESET_COLLECTION__TEAM_STANDINGS = False
 
 # if True, we nuke and rebuild the 'team_data' collection
-DEBUG_RESET_COLLECTION__TEAM_DATA = True
-# DEBUG_RESET_COLLECTION__TEAM_DATA = False
+DEBUG_RESET_COLLECTION__TEAM_DATA = False
 
 # if True, we only operate on the last four days of any given month
 DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
@@ -40,6 +39,7 @@ DEBUG_VERBOSE = False
 # which seasons to farm on this run: "current_only" farms just the latest season (self-updating,
 # no manual month-list maintenance needed); "all_since_1942" walks every season back to 1942-43.
 # NOTE: "all_since_1942" is a long-running, many-thousand-call operation against the live NHL API.
+# overridden entirely if a seasonId is passed on the command line (see parse_args/season_by_id).
 SEASONS_TO_PROCESS = "current_only"
 
 # the earliest seasonId we care about: the 1942-43 season, the start of the "Original Six" era
@@ -57,6 +57,28 @@ def get_season_manifest(earliest_season_id=EARLIEST_SEASON_ID):
     seasons_in_range = [s for s in all_seasons if s["id"] >= earliest_season_id]
     seasons_in_range.sort(key=lambda s: s["id"])
     return seasons_in_range
+
+
+def season_by_id(season_manifest, season_id):
+    for season in season_manifest:
+        if season["id"] == season_id:
+            return season
+    raise ValueError(f"seasonId {season_id} not found in the season manifest")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Farm NHL standings/team data into MongoDB."
+    )
+    parser.add_argument(
+        "season_id",
+        type=int,
+        nargs="?",
+        default=None,
+        help="Restrict the run to a single seasonId (e.g. 19891990 for the 1989-90 "
+        "season). If omitted, falls back to SEASONS_TO_PROCESS.",
+    )
+    return parser.parse_args()
 
 
 def most_recently_started_season(season_manifest, today=None):
@@ -246,6 +268,8 @@ def store_standings_in_mongo(standings_list: list[Any]):
 ########################################
 # SCRIPT EXECUTION STARTS HERE
 ########################################
+args = parse_args()
+
 mongo_client = MongoClient(mongo.URI)
 try:
     # connect to MongoDB
@@ -277,7 +301,9 @@ collection_team_standings = database[mongo.COLLECTION_TEAM_STANDINGS]
 print()
 
 season_manifest = get_season_manifest()
-if SEASONS_TO_PROCESS == "current_only":
+if args.season_id is not None:
+    seasons_to_run = [season_by_id(season_manifest, args.season_id)]
+elif SEASONS_TO_PROCESS == "current_only":
     seasons_to_run = [most_recently_started_season(season_manifest)]
 else:
     seasons_to_run = season_manifest
