@@ -50,3 +50,9 @@ class UserData(CamelModel):
     user: str
     start_date: str
     end_date: str
+
+class SeasonInfo(CamelModel):
+    # _id: int  (the seasonId, e.g. 19421943)
+    season_id: int
+    start_date: str
+    end_date: str

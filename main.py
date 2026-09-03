@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from app.routes.nhl_standings import router as nhl_standings_router
 from app.routes.nhl_team_info import router as nhl_team_info_router
+from app.routes.season_info import router as season_info_router
 from app.routes.user_data import router as user_data_router
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,9 @@ origins = [
     # "https://your-production-frontend.com",
 ]
 
+# Starlette types add_middleware() with a ParamSpec that PyCharm's checker can't resolve, so it
+# wrongly flags CORSMiddleware below. The call is correct.
+# noinspection PyTypeChecker
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -28,6 +32,7 @@ app.add_middleware(
 
 app.include_router(nhl_standings_router)            # /api/nhl_standings
 app.include_router(nhl_team_info_router)            # /api/nhl_team_info
+app.include_router(season_info_router)              # /api/season_info
 app.include_router(user_data_router)                # /api/user_data
 
 
