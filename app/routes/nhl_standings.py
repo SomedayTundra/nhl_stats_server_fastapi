@@ -1,7 +1,14 @@
+import asyncio
 import logging
-from typing import Optional
+import os
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+from typing import Any, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from app.schemas import TeamStanding
 
@@ -29,6 +36,78 @@ def fresh_today():
 
 LAST_DAY_OF_2026_SEASON = '2026-04-17'
 
+############################
+# ON-DEMAND FARMING
+#
+# when the client asks for a season we've never cached, shell out to update_mongodb.py to farm it
+# from the NHL API before answering. A full season is a few minutes of NHL API calls, so the
+# client shows a "loading uncached data" state while this request stays open.
+_APP_DIR = Path(__file__).resolve().parents[1]
+_UPDATE_SCRIPT = _APP_DIR / "scripts" / "update_mongodb.py"
+_FARM_TIMEOUT_SECONDS = 30 * 60
+
+# one lock per seasonId so concurrent/retried requests for the same uncached season wait for the
+# first farm instead of each launching their own; _farm_attempted remembers seasons we've already
+# run the script for this session, so a completed season with a genuine data gap isn't re-farmed
+# on every request
+_farm_locks: dict[int, asyncio.Lock] = {}
+_farm_attempted: set[int] = set()
+
+
+def _farm_subprocess_env() -> dict[str, str]:
+    # update_mongodb.py does `import mongo_db_constants` and writes logos to ..\logos, so it needs
+    # app/constants + app/scripts on PYTHONPATH and its cwd set to app/scripts (see below)
+    env = dict(os.environ)
+    roots = os.pathsep.join([str(_APP_DIR / "constants"), str(_UPDATE_SCRIPT.parent)])
+    env["PYTHONPATH"] = roots + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    return env
+
+
+def _run_update_script_blocking(season_id: int) -> None:
+    result = subprocess.run(
+        [sys.executable, str(_UPDATE_SCRIPT), str(season_id)],
+        cwd=str(_UPDATE_SCRIPT.parent),
+        env=_farm_subprocess_env(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=_FARM_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        logging.error("update_mongodb.py failed for season %s (exit %s):\n%s",
+                      season_id, result.returncode, (result.stdout or "")[-2000:])
+        raise RuntimeError(f"update_mongodb.py exited {result.returncode}")
+
+
+async def _ensure_season_cached(season_id: int) -> None:
+    db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
+    collection = db_nhl_stats[mongo.COLLECTION_TEAM_STANDINGS]
+    if collection.count_documents({"seasonId": season_id}, limit=1) > 0 or season_id in _farm_attempted:
+        return
+
+    # only auto-farm seasons that are already over: their data is final, so "farm once, keep
+    # forever" holds. The current/upcoming season is kept fresh by running update_mongodb.py
+    # directly instead, and a not-yet-finished season would just have us re-farm on every request.
+    season_meta = db_nhl_stats[mongo.COLLECTION_SEASON_INFO].find_one({"_id": season_id})
+    if season_meta is None or season_meta.get("endDate", "") >= date.today().isoformat():
+        return
+
+    lock = _farm_locks.setdefault(season_id, asyncio.Lock())
+    async with lock:
+        # another request may have finished farming this season while we waited for the lock
+        if collection.count_documents({"seasonId": season_id}, limit=1) > 0 or season_id in _farm_attempted:
+            return
+
+        logging.info("no cached standings for season %s; farming via update_mongodb.py", season_id)
+        try:
+            await run_in_threadpool(_run_update_script_blocking, season_id)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail=f"timed out farming season {season_id} from the NHL API")
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"failed to farm season {season_id} from the NHL API: {exc}")
+        # succeeded (even if the NHL API had nothing for it) - don't run the script again this session
+        _farm_attempted.add(season_id)
+
 
 ############################
 # ROUTE:  "/api/nhl_standings"
@@ -47,7 +126,14 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
     # fetch the data the user wanted, team standings info from start_date => end_date
     collection_team_standings = db_nhl_stats[mongo.COLLECTION_TEAM_STANDINGS]
 
-    date_match = {
+    # if the client named a season we have nothing for, farm it from the NHL API before answering
+    if season_id is not None:
+        await _ensure_season_cached(season_id)
+
+    # a Mongo query document is genuinely heterogeneous (str, int, nested dicts, ...) - annotate it
+    # as such up front, otherwise the checker infers dict[str, str] from the literal below and
+    # balks at assigning the int seasonId to it further down
+    date_match: dict[str, Any] = {
         "date": {
             "$gte": start_date,
             "$lte": end_date,

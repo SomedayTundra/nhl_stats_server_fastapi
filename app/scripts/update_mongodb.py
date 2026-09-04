@@ -226,8 +226,10 @@ def store_standings_in_mongo(standings_list: list[Any]):
                             "teams": {
                                 "conferenceName": team.get("conferenceName", "NA"),
                                 "conferenceAbbrev": team.get("conferenceAbbrev", "NA"),
-                                "divisionName": team["divisionName"],
-                                "divisionAbbrev": team["divisionAbbrev"],
+                                # pre-1967 seasons had no divisions; keep the same "NA" fallback
+                                # the conference fields above use
+                                "divisionName": team.get("divisionName", "NA"),
+                                "divisionAbbrev": team.get("divisionAbbrev", "NA"),
                                 "placeName": team["placeName"]["default"],
                                 "teamName": TEAM_NAME,
                                 "teamCommonName": team["teamCommonName"]["default"],
