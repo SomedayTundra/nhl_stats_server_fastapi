@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from app.schemas import TeamInfo
@@ -20,21 +20,28 @@ router = APIRouter(prefix="/api/nhl_team_info", tags=["nhl_team_info"])
 ############################
 # MONGO DB CLIENT
 #
-import mongo_db_constants as mongo
+from app.constants import mongo_db_constants as mongo
 
 ############################
 # MISC
-LOGOS_DIR = "logos"
+# resolve relative to this module (app/logos), not the process CWD
+LOGOS_DIR = (Path(__file__).resolve().parents[1] / "logos")
 
 ############################
 # ROUTE:  "/nhl_team_info/logo"
 #
 @router.get("/logo")
 async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
-    image_path = Path(LOGOS_DIR, logo_filename)
-    if not image_path.is_file():
-        return {"error": f"logo not found on the server: {logo_filename}"}
-    return FileResponse(image_path)
+    # logo_filename is attacker-controlled query input; accept only a bare filename that lands
+    # inside LOGOS_DIR, never a path that could traverse out of it
+    candidate = (LOGOS_DIR / logo_filename).resolve()
+    if (
+        Path(logo_filename).name != logo_filename
+        or LOGOS_DIR not in candidate.parents
+        or not candidate.is_file()
+    ):
+        raise HTTPException(status_code=404, detail=f"logo not found: {logo_filename}")
+    return FileResponse(candidate)
 
 
 ############################

@@ -1,17 +1,12 @@
-from pydantic import BaseModel
-from humps import camelize
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
 ##########
 # CamelModel conveniently aliases all of our snake_case field names to camelCase
 # since most of our clients will prefer to digest camelCase names
-def to_camel(string):
-    return camelize(string)
-
 class CamelModel(BaseModel):
-    class Config:
-        alias_generator = to_camel
-        validate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True)
 
 
 ##########

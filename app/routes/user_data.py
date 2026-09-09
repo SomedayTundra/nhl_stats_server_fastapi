@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/user_data", tags=["user_data"])
 ############################
 # MONGO DB CLIENT
 #
-import mongo_db_constants as mongo
+from app.constants import mongo_db_constants as mongo
 
 ############################
 # ROUTE:  "/api/user_data/"

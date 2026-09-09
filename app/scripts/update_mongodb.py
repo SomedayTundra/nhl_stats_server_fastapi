@@ -4,20 +4,28 @@
 # ACCESSED VIA OUR FASTAPI REST INTERFACE TO
 # FUEL OUR WEB CLIENTS
 #
+# Run from the repo root as a module so `from app.constants ...` resolves:
+#     python -m app.scripts.update_mongodb            # current season
+#     python -m app.scripts.update_mongodb 19891990   # one specific season
+#
 ###################################################
 
 
 import argparse
 import os
 from datetime import date
+from pathlib import Path
 from typing import Any
 
-import requests
+import httpx
+from dotenv import load_dotenv
 from nhlpy import NHLClient
 from pymongo import MongoClient
 from calendar import monthrange
 
-import mongo_db_constants as mongo
+load_dotenv()
+
+from app.constants import mongo_db_constants as mongo
 
 ############################################
 # DEBUG FLAGS
@@ -47,7 +55,8 @@ EARLIEST_SEASON_ID = 19421943
 
 ############################################
 
-LOCAL_IMAGE_FOLDER = "..\\logos"
+# app/logos, resolved relative to this file so it works regardless of CWD or OS
+LOCAL_IMAGE_FOLDER = str(Path(__file__).resolve().parents[1] / "logos")
 
 nhl_client = NHLClient()
 
@@ -131,21 +140,20 @@ def does_local_image_exist(image_url, local_save_folder=LOCAL_IMAGE_FOLDER):
 
 
 def save_image_file(image_url, local_save_folder=LOCAL_IMAGE_FOLDER):
-    # send a GET request to the image URL
+    # send a GET request to the image URL (follow_redirects mirrors requests' default behaviour)
     image_name = get_image_name_from_image_url(image_url)
-    response = requests.get(image_url, stream=True)
+    with httpx.stream("GET", image_url, follow_redirects=True) as response:
+        if response.status_code == 200:
+            success = False
+            local_image_path = os.path.join(local_save_folder, image_name)
+            with open(local_image_path, "wb+") as file:
+                for chunk in response.iter_bytes(1024):
+                    file.write(chunk)
+                print(f"Downloaded: {image_name}, saved to: {local_image_path}")
+                success = True
 
-    if response.status_code == 200:
-        success = False
-        local_image_path = os.path.join(local_save_folder, image_name)
-        with open(local_image_path, "wb+") as file:
-            for chunk in response.iter_content(1024):
-                file.write(chunk)
-            print(f"Downloaded: {image_name}, saved to: {local_image_path}")
-            success = True
-
-        if not success:
-            print(f"Failed to download: {image_url}")
+            if not success:
+                print(f"Failed to download: {image_url}")
 
 
 def farm_standings_for_month(year, month):

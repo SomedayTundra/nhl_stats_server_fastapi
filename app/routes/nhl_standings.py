@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/nhl_standings", tags=["nhl_standings"])
 ############################
 # MONGO DB CLIENT
 #
-import mongo_db_constants as mongo
+from app.constants import mongo_db_constants as mongo
 
 ############################
 # MISC
@@ -42,9 +42,14 @@ LAST_DAY_OF_2026_SEASON = '2026-04-17'
 # when the client asks for a season we've never cached, shell out to update_mongodb.py to farm it
 # from the NHL API before answering. A full season is a few minutes of NHL API calls, so the
 # client shows a "loading uncached data" state while this request stays open.
+#
+# This is opt-in via ENABLE_ONDEMAND_FARMING. Production pre-loads the database and farms new
+# data by hand (`python -m app.scripts.update_mongodb <seasonId>`), so a stray request for an
+# un-cached season should just return what we have rather than tie up a worker for minutes.
 _APP_DIR = Path(__file__).resolve().parents[1]
-_UPDATE_SCRIPT = _APP_DIR / "scripts" / "update_mongodb.py"
+_REPO_ROOT = _APP_DIR.parent
 _FARM_TIMEOUT_SECONDS = 30 * 60
+_ONDEMAND_FARMING_ENABLED = os.getenv("ENABLE_ONDEMAND_FARMING", "false").strip().lower() in {"1", "true", "yes"}
 
 # one lock per seasonId so concurrent/retried requests for the same uncached season wait for the
 # first farm instead of each launching their own; _farm_attempted remembers seasons we've already
@@ -54,20 +59,13 @@ _farm_locks: dict[int, asyncio.Lock] = {}
 _farm_attempted: set[int] = set()
 
 
-def _farm_subprocess_env() -> dict[str, str]:
-    # update_mongodb.py does `import mongo_db_constants` and writes logos to ..\logos, so it needs
-    # app/constants + app/scripts on PYTHONPATH and its cwd set to app/scripts (see below)
-    env = dict(os.environ)
-    roots = os.pathsep.join([str(_APP_DIR / "constants"), str(_UPDATE_SCRIPT.parent)])
-    env["PYTHONPATH"] = roots + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    return env
-
-
 def _run_update_script_blocking(season_id: int) -> None:
+    # run the farm script as a module from the repo root so it resolves `from app.constants ...`
+    # without any PYTHONPATH juggling; it inherits MONGO_URI etc. from our environment
     result = subprocess.run(
-        [sys.executable, str(_UPDATE_SCRIPT), str(season_id)],
-        cwd=str(_UPDATE_SCRIPT.parent),
-        env=_farm_subprocess_env(),
+        [sys.executable, "-m", "app.scripts.update_mongodb", str(season_id)],
+        cwd=str(_REPO_ROOT),
+        env=dict(os.environ),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -83,6 +81,13 @@ async def _ensure_season_cached(season_id: int) -> None:
     db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection = db_nhl_stats[mongo.COLLECTION_TEAM_STANDINGS]
     if collection.count_documents({"seasonId": season_id}, limit=1) > 0 or season_id in _farm_attempted:
+        return
+
+    if not _ONDEMAND_FARMING_ENABLED:
+        logging.info(
+            "season %s is not cached and ENABLE_ONDEMAND_FARMING is off; serving what we have",
+            season_id,
+        )
         return
 
     # only auto-farm seasons that are already over: their data is final, so "farm once, keep

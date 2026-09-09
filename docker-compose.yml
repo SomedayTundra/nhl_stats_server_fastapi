@@ -1,0 +1,58 @@
+# Production stack for the Lightsail box: MongoDB + FastAPI + Caddy (auto-HTTPS reverse proxy).
+# First run:  cp .env.example .env  (edit values)  &&  docker compose up -d --build
+# Mongo is pre-loaded via `mongorestore` into the `mongo_data` volume; see the deploy notes.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # deliberately not published to the host or internet; only the api container reaches it
+    expose:
+      - "27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://mongo:27017/
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-https://somedaytundra.com,https://www.somedaytundra.com}
+      ENABLE_ONDEMAND_FARMING: "false"
+    volumes:
+      # keep hand-farmed logo SVGs on the host (in the repo working tree) so they survive image
+      # rebuilds and can be committed back to git
+      - ./app/logos:/app/app/logos
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  mongo_data:
+  caddy_data:
+  caddy_config:
