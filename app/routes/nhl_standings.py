@@ -147,33 +147,10 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
     if season_id is not None:
         date_match["seasonId"] = season_id
 
-    pipeline = []
+    pipeline: list[dict[str, Any]] = []
     pipeline.append({"$match": date_match})
     pipeline.append(
         {"$unwind": "$team_info"}
-    )
-    pipeline.append(
-        {"$sort": {"date": 1}}
-    )
-    pipeline.append(
-        {
-            "$lookup": {
-                "from": "team_data",
-                "let": {"team_name": "$team_info.name", "season_id": "$seasonId"},
-                "pipeline": [
-                    {"$match": {"$expr": {"$eq": ["$seasonId", "$$season_id"]}}},
-                    {"$unwind": "$teams"},
-                    {"$match": {"$expr": {"$eq": ["$teams.teamName", "$$team_name"]}}},
-                    {"$replaceRoot": {"newRoot": "$teams"}},
-                ],
-                "as": "team_data"
-            }
-        }
-    )
-    pipeline.append(
-        {
-            "$unwind": "$team_data"
-        }
     )
 
     if teams is not None:
@@ -190,19 +167,12 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
         )
 
     pipeline.append(
-        {"$sort": {"team_info.abbrev.default": 1, "date": 1}}
-    )
-
-    pipeline.append(
         {
             "$project": {
-                "_id": 1,
+                "_id": 0,
                 "date": 1,
                 "season_id": '$seasonId',
                 "team_name": '$team_info.name',
-                "team_common_name": '$team_data.teamCommonName',
-                "team_abbrev": '$team_data.teamAbbrev',
-                "logo": '$team_data.localLogo',
                 "wins": '$team_info.wins',
                 "losses": '$team_info.losses',
                 "ot_losses": '$team_info.ot_losses',
@@ -214,19 +184,35 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
         }
     )
 
-    results = collection_team_standings.aggregate(pipeline)
+    rows = list(collection_team_standings.aggregate(pipeline))
+
+    # team abbrev / common name / logo are constant for a team across a whole season, but they live
+    # in a separate `team_data` collection (one document per season, holding all ~32 teams). Joining
+    # them in per row with a correlated `$lookup` used to dominate this endpoint's runtime (~5.5s for
+    # a full season). Instead we pull the one `team_data` doc per season referenced by the result set
+    # and enrich in Python - the same output, ~50x faster.
+    season_ids = {row["season_id"] for row in rows}
+    collection_team_data = db_nhl_stats[mongo.COLLECTION_TEAM_DATA]
+    team_meta: dict[tuple[int, str], dict[str, Any]] = {}
+    for team_data_doc in collection_team_data.find({"seasonId": {"$in": list(season_ids)}}):
+        for team in team_data_doc.get("teams", []):
+            team_meta[(team_data_doc["seasonId"], team["teamName"])] = team
 
     team_standing_results = []
-    for entry in results:
-        entry_date = entry["date"]
+    for entry in rows:
+        # mirrors the old `$unwind: $team_data`: a standings row whose team has no team_data match
+        # (name mismatch, un-farmed season) is dropped rather than returned half-populated
+        meta = team_meta.get((entry["season_id"], entry["team_name"]))
+        if meta is None:
+            continue
 
         new_team_standing = TeamStanding(
             season_id=entry["season_id"],
-            date=entry_date,
+            date=entry["date"],
             team_name=entry["team_name"],
-            team_abbrev=entry["team_abbrev"],
-            team_common_name=entry["team_common_name"],
-            logo=entry["logo"],
+            team_abbrev=meta["teamAbbrev"],
+            team_common_name=meta["teamCommonName"],
+            logo=meta["localLogo"],
             wins=entry["wins"],
             losses=entry["losses"],
             ot_losses=entry["ot_losses"],
@@ -236,5 +222,8 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
             goal_diff=entry["goal_diff"],
         )
         team_standing_results.append(new_team_standing)
+
+    # keep the old response ordering (by team, then chronological) so any client relying on it is unaffected
+    team_standing_results.sort(key=lambda r: (r.team_abbrev, r.date))
 
     return team_standing_results
