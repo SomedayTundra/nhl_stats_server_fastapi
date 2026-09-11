@@ -12,3 +12,7 @@ venv/
 
 # logs / scratch
 *.log
+
+# logo build tooling (scripts/build-logos.mjs)
+node_modules/
+package-lock.json

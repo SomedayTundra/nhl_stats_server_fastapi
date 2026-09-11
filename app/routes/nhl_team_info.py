@@ -27,21 +27,45 @@ from app.constants import mongo_db_constants as mongo
 # resolve relative to this module (app/logos), not the process CWD
 LOGOS_DIR = (Path(__file__).resolve().parents[1] / "logos")
 
+# pre-rasterized PNG sizes produced by scripts/build-logos.mjs (npm run build:logos).
+# Clients pass ?size=1x|2x to get a clean lanczos3 downscale instead of letting the browser
+# squash the 960x640 vector art down to ~48px in one pass.
+LOGO_PNG_SIZES = {"1x", "2x"}
+
+
+def _resolve_logo(filename: str) -> Path:
+    # filename is attacker-controlled query input; accept only a bare filename that lands
+    # inside LOGOS_DIR, never a path that could traverse out of it
+    candidate = (LOGOS_DIR / filename).resolve()
+    if (
+        Path(filename).name != filename
+        or LOGOS_DIR not in candidate.parents
+        or not candidate.is_file()
+    ):
+        raise HTTPException(status_code=404, detail=f"logo not found: {filename}")
+    return candidate
+
+
 ############################
 # ROUTE:  "/nhl_team_info/logo"
 #
 @router.get("/logo")
-async def get_image(logo_filename: str = "nhl_shield_dark.svg"):
-    # logo_filename is attacker-controlled query input; accept only a bare filename that lands
-    # inside LOGOS_DIR, never a path that could traverse out of it
-    candidate = (LOGOS_DIR / logo_filename).resolve()
-    if (
-        Path(logo_filename).name != logo_filename
-        or LOGOS_DIR not in candidate.parents
-        or not candidate.is_file()
-    ):
-        raise HTTPException(status_code=404, detail=f"logo not found: {logo_filename}")
-    return FileResponse(candidate)
+async def get_image(
+    logo_filename: str = "nhl_shield_dark.svg", size: Optional[str] = None
+):
+    if size in LOGO_PNG_SIZES:
+        # e.g. "BOS_light.svg" + "2x" -> "BOS_light@2x.png"; fall back to the SVG when the
+        # PNG hasn't been generated for this logo
+        png_name = f"{Path(logo_filename).stem}@{size}.png"
+        png_candidate = (LOGOS_DIR / png_name).resolve()
+        if (
+            Path(png_name).name == png_name
+            and LOGOS_DIR in png_candidate.parents
+            and png_candidate.is_file()
+        ):
+            return FileResponse(png_candidate)
+
+    return FileResponse(_resolve_logo(logo_filename))
 
 
 ############################
