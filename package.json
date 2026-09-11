@@ -1,0 +1,13 @@
+{
+  "name": "nhl-stats-server-logo-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build-time tooling for the FastAPI server: optimizes the team logo SVGs and pre-rasterizes them to PNGs the /logo route serves.",
+  "scripts": {
+    "build:logos": "node scripts/build-logos.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.2",
+    "svgo": "^4.0.0"
+  }
+}
