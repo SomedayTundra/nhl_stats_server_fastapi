@@ -53,6 +53,12 @@ def _resolve_logo(filename: str) -> Path:
 async def get_image(
     logo_filename: str = "nhl_shield_dark.svg", size: Optional[str] = None
 ):
+    # no-cache (not no-store): browsers still keep a copy, but must revalidate it against the
+    # ETag/Last-Modified FileResponse already sets before reusing it, so an edited logo (new
+    # mtime/etag) is picked up immediately instead of silently serving stale bytes for a URL
+    # the client already fetched once
+    headers = {"Cache-Control": "no-cache"}
+
     if size in LOGO_PNG_SIZES:
         # e.g. "BOS_light.svg" + "2x" -> "BOS_light@2x.png"; fall back to the SVG when the
         # PNG hasn't been generated for this logo
@@ -63,9 +69,9 @@ async def get_image(
             and LOGOS_DIR in png_candidate.parents
             and png_candidate.is_file()
         ):
-            return FileResponse(png_candidate)
+            return FileResponse(png_candidate, headers=headers)
 
-    return FileResponse(_resolve_logo(logo_filename))
+    return FileResponse(_resolve_logo(logo_filename), headers=headers)
 
 
 ############################
