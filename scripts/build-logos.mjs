@@ -26,6 +26,16 @@ const SIZES = {'1x': 64, '2x': 128}
 // with (viewBox is 960 wide, so this is ~2x supersampling before the resize).
 const RENDER_DENSITY = 144
 
+// every crest shares a 960x640 viewBox, but how much of that canvas the artist actually drew
+// into varies a lot per logo (measured fill ratios across the set range from ~52% to 100%).
+// Naively "contain"-fitting the raw viewBox means loosely-drawn crests render visibly smaller
+// than tightly-drawn ones at the same on-screen size (e.g. STL's 2008-09-2024-25 crest has far
+// less internal padding than most, so it looked oversized next to every other team's hover
+// logo on the chart). Trimming to the actual ink first and then re-fitting that trimmed content
+// to a fixed fraction of the square canvas keeps every logo's visual weight consistent
+// regardless of how much whitespace the source art happens to have.
+const TARGET_FILL = 0.72
+
 const svgFiles = (await readdir(LOGOS_DIR))
     .filter((name) => extname(name).toLowerCase() === '.svg')
     .sort()
@@ -53,9 +63,18 @@ for (const name of svgFiles) {
     const stem = basename(name, extname(name))
     const svgBuffer = Buffer.from(optimizedSvg)
 
+    const trimmedBuffer = await sharp(svgBuffer, {density: RENDER_DENSITY})
+        .trim({background: {r: 0, g: 0, b: 0, alpha: 0}})
+        .toBuffer()
+
     for (const [label, px] of Object.entries(SIZES)) {
-        await sharp(svgBuffer, {density: RENDER_DENSITY})
-            .resize(px, px, {fit: 'contain', background: {r: 0, g: 0, b: 0, alpha: 0}})
+        const contentPx = Math.round(px * TARGET_FILL)
+        const content = await sharp(trimmedBuffer)
+            .resize(contentPx, contentPx, {fit: 'contain', background: {r: 0, g: 0, b: 0, alpha: 0}})
+            .toBuffer()
+
+        await sharp({create: {width: px, height: px, channels: 4, background: {r: 0, g: 0, b: 0, alpha: 0}}})
+            .composite([{input: content, gravity: 'center'}])
             .png({compressionLevel: 9, palette: true, quality: 90, effort: 10})
             .toFile(join(LOGOS_DIR, `${stem}@${label}.png`))
         pngCount++
