@@ -21,6 +21,7 @@ import httpx
 from dotenv import load_dotenv
 from nhlpy import NHLClient
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 from calendar import monthrange
 
 load_dotenv()
@@ -269,10 +270,30 @@ def store_standings_in_mongo(standings_list: list[Any]):
             }
             all_team_standings_on_this_day["team_info"].append(team_standings)
 
-        collection_team_standings.insert_one(all_team_standings_on_this_day)
-        print(
-            f"  Inserted stats for {all_team_standings_on_this_day['date']} into our database"
-        )
+        # upsert keyed on (seasonId, date) rather than insert_one: the pre-check in
+        # farm_standings_for_day is a look-then-act race (two overlapping runs can both see "not
+        # found" before either inserts), and the collection now has a unique index on that pair -
+        # a plain insert_one would throw DuplicateKeyError if that race is ever hit again. Upserting
+        # makes a re-run idempotent instead: same day -> same document, not a duplicate.
+        try:
+            collection_team_standings.update_one(
+                {"seasonId": season_id, "date": standings_date},
+                {"$set": all_team_standings_on_this_day},
+                upsert=True,
+            )
+            print(
+                f"  Saved stats for {all_team_standings_on_this_day['date']} into our database"
+            )
+        except DuplicateKeyError:
+            # the upsert itself can still race: two concurrent runs can both see "no document
+            # yet" and both attempt the insert half of the upsert, and Mongo's unique index only
+            # lets one of them win. The loser landing here means a concurrent run already saved
+            # this exact (seasonId, date) - there's nothing left for us to do, so treat it as the
+            # no-op it is rather than letting the whole farm run crash over a day it already has.
+            print(
+                f"  ..{all_team_standings_on_this_day['date']} was just saved by a concurrent "
+                f"run, skipping"
+            )
 
 
 ########################################

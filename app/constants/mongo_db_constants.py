@@ -26,3 +26,13 @@ try:
     logging.info(f"Connected successfully [{client.address}]")
 except Exception as e:
     raise RuntimeError(f"could not connect to MongoDB at {URI}: {e}") from e
+
+# at most one team_standings document per (seasonId, date). Without this, two farm runs that
+# overlap for the same season (a manual backfill racing the server's own on-demand farming, or a
+# re-run that starts before an earlier one finishes) can both pass update_mongodb.py's "do we
+# already have this day" check before either has inserted, and both write the same day - an exact
+# duplicate that then shows up as a duplicate row in the standings table. create_index is a no-op
+# if the index already exists, so this is cheap to run on every import.
+client[DB_NAME_NHL_STATS][COLLECTION_TEAM_STANDINGS].create_index(
+    [("seasonId", 1), ("date", 1)], unique=True, name="unique_season_date"
+)
