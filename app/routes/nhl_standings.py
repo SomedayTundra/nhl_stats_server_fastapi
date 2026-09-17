@@ -180,6 +180,13 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
                 "goals_for": '$team_info.goals_for',
                 "goals_against": '$team_info.goals_against',
                 "goal_diff": '$team_info.goal_diff',
+                "l10_wins": '$team_info.l10_wins',
+                "l10_losses": '$team_info.l10_losses',
+                "l10_ot_losses": '$team_info.l10_ot_losses',
+                "l10_ties": '$team_info.l10_ties',
+                "l10_goals_for": '$team_info.l10_goals_for',
+                "l10_goals_against": '$team_info.l10_goals_against',
+                "l10_goal_diff": '$team_info.l10_goal_diff',
             }
         }
     )
@@ -220,6 +227,13 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
             goals_for=entry["goals_for"],
             goals_against=entry["goals_against"],
             goal_diff=entry["goal_diff"],
+            l10_wins=entry.get("l10_wins"),
+            l10_losses=entry.get("l10_losses"),
+            l10_ot_losses=entry.get("l10_ot_losses"),
+            l10_ties=entry.get("l10_ties"),
+            l10_goals_for=entry.get("l10_goals_for"),
+            l10_goals_against=entry.get("l10_goals_against"),
+            l10_goal_diff=entry.get("l10_goal_diff"),
         )
         team_standing_results.append(new_team_standing)
 

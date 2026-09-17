@@ -267,6 +267,17 @@ def store_standings_in_mongo(standings_list: list[Any]):
                 "goals_for": team["goalFor"],
                 "goals_against": team["goalAgainst"],
                 "goal_diff": team["goalDifferential"],
+                # the NHL API's own last-10 tallies, which it supplies for every era back to
+                # 1942-43. Pre-shootout seasons report l10OtLosses as 0 and put those games in
+                # l10Ties instead; 1999-2000 through 2003-04 are the only seasons where both can
+                # be non-zero, since a game could still end tied after a five-minute overtime
+                "l10_wins": team["l10Wins"],
+                "l10_losses": team["l10Losses"],
+                "l10_ot_losses": team["l10OtLosses"],
+                "l10_ties": team["l10Ties"],
+                "l10_goals_for": team["l10GoalsFor"],
+                "l10_goals_against": team["l10GoalsAgainst"],
+                "l10_goal_diff": team["l10GoalDifferential"],
             }
             all_team_standings_on_this_day["team_info"].append(team_standings)
 

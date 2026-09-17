@@ -103,6 +103,7 @@ async def get_season_info(season_id: Optional[int] = None):
             season_id=resolved_season_id,
             start_date=cached["startDate"],
             end_date=cached["endDate"],
+            l10_ot_and_tie_overlap=cached.get("l10OtAndTieOverlap"),
         )
 
     start_date, end_date = _fetch_season_dates_from_nhl(resolved_season_id)

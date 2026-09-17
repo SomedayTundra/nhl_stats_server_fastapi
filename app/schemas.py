@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
@@ -39,6 +41,16 @@ class TeamStanding(CamelModel):
     goals_for: int
     goals_against: int
     goal_diff: int
+    # the last-10-games tallies. Optional because days farmed before these were captured have no
+    # such fields until `backfill_last_ten.py` has run over them; the client renders the gap
+    # rather than a misleading zero
+    l10_wins: Optional[int] = None
+    l10_losses: Optional[int] = None
+    l10_ot_losses: Optional[int] = None
+    l10_ties: Optional[int] = None
+    l10_goals_for: Optional[int] = None
+    l10_goals_against: Optional[int] = None
+    l10_goal_diff: Optional[int] = None
 
 class UserData(CamelModel):
     # _id: int
@@ -51,3 +63,9 @@ class SeasonInfo(CamelModel):
     season_id: int
     start_date: str
     end_date: str
+    # True for a season where some team's last-10 window has hit a non-zero OT loss and a
+    # non-zero tie at the same time (only possible 1999-2000 through 2003-04, when both existed)
+    # - see app/scripts/tag_l10_overlap_seasons.py. Optional/None for a season that script hasn't
+    # tagged yet (a brand-new season fetched straight from the NHL manifest); the client treats
+    # that the same as False, which is correct since a season with no games yet can't overlap
+    l10_ot_and_tie_overlap: Optional[bool] = None
