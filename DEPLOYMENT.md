@@ -16,6 +16,8 @@ Incremental cost is essentially the Lightsail instance (~$12/mo).
 
 - `Dockerfile`, `.dockerignore` — API image (Python 3.14, `uvicorn main:app`, single worker).
 - `docker-compose.yml` — `mongo` (private, named volume) + `api` + `caddy` (80/443, auto-HTTPS).
+  `api` bind-mounts `./backups` on the host (gitignored) for `app/scripts/backup_mongo.py` /
+  `restore_mongo.py` archives.
 - `Caddyfile` — reverse proxy for `api.somedaytundra.com`.
 - `requirements.txt` — pinned runtime deps.
 - `.env.example` — every environment variable the app reads.
@@ -53,19 +55,23 @@ curl https://api.somedaytundra.com/health   # -> {"status":"ok"}
 
 ### 4. Load the database
 `update_mongodb.py` is run by hand to farm historical data; the DB is pre-loaded so the live
-site never needs to farm.
+site never needs to farm. Seed it from a local dump using `app/scripts/backup_mongo.py` /
+`restore_mongo.py` (wrap `mongodump`/`mongorestore`, installed in the api image alongside each
+other via the MongoDB Database Tools - see the Dockerfile).
 
 ```bash
 # on your dev machine, against local Mongo:
-mongodump --uri mongodb://localhost:27017 --db nhl_stats --gzip --archive=nhl_stats.archive
-scp nhl_stats.archive <user>@<ip>:~/
+docker compose exec -T api python -m app.scripts.backup_mongo --out-dir /backups
+scp ./backups/nhl_stats-<date>.archive.gz <user>@<ip>:~/nhl_stats_server_fastapi/backups/
 
-# on the box:
-docker compose cp ~/nhl_stats.archive mongo:/tmp/nhl_stats.archive
-docker compose exec mongo mongorestore --gzip --archive=/tmp/nhl_stats.archive --drop
-docker compose exec mongo mongosh nhl_stats --quiet --eval \
-  'db.getCollectionNames().forEach(c => print(c, db[c].countDocuments()))'
+# on the box, once `docker compose up -d --build` has brought up the api container:
+docker compose exec -T api python -m app.scripts.restore_mongo \
+  --in /backups/nhl_stats-<date>.archive.gz --yes
 ```
+
+`--yes` is required here because this step runs non-interactively; drop it (and run without `-T`)
+to get an interactive confirmation prompt instead. Either way `restore_mongo.py` prints
+per-collection document counts once it's done, as the sanity check.
 
 ### 5. Client hosting (in AWS console / CLI)
 - **S3 bucket** `somedaytundra.com`, Block Public Access ON (served only via CloudFront OAC).
@@ -96,7 +102,18 @@ docker compose exec api python -m app.scripts.update_mongodb 20242025   # a spec
 ```
 Newly downloaded logo SVGs land in `app/logos/` on the host (bind-mounted) — commit them.
 
-**Backups:** add a cron on the box: `docker compose exec -T mongo mongodump --archive --gzip | aws s3 cp - s3://<backup-bucket>/nhl_stats-$(date +%F).archive.gz`.
+**Backups:**
+```bash
+docker compose exec -T api python -m app.scripts.backup_mongo --out-dir /backups
+```
+Writes `/backups/nhl_stats-<UTC date>.archive.gz` inside the api container, which
+docker-compose.yml bind-mounts to `./backups/` on the host. Wire this into a cron on the box, and
+add an upload step if the archive needs to leave the host too, e.g.:
+```bash
+cd ~/nhl_stats_server_fastapi && \
+  docker compose exec -T api python -m app.scripts.backup_mongo --out-dir /backups && \
+  aws s3 cp "backups/nhl_stats-$(date -u +%F).archive.gz" s3://<backup-bucket>/
+```
 
 ## Known follow-ups (not blockers)
 

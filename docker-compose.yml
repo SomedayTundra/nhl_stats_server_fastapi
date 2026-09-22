@@ -31,6 +31,8 @@ services:
       # keep hand-farmed logo SVGs on the host (in the repo working tree) so they survive image
       # rebuilds and can be committed back to git
       - ./app/logos:/app/app/logos
+      # backup_mongo.py / restore_mongo.py archives, visible on the host for scp/S3 upload
+      - ./backups:/backups
     expose:
       - "8000"
     healthcheck:

@@ -13,6 +13,9 @@ venv/
 # logs / scratch
 *.log
 
+# mongo backup archives (app/scripts/backup_mongo.py)
+backups/
+
 # logo build tooling (scripts/build-logos.mjs)
 node_modules/
 package-lock.json

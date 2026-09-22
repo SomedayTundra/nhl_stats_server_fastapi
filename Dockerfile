@@ -7,6 +7,31 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# mongodump/mongorestore for app/scripts/backup_mongo.py and restore_mongo.py (see
+# DEPLOYMENT.md). Not a pip package - MongoDB publishes these as a standalone tarball. Pinned to
+# the debian12 build rather than registering MongoDB's apt repo, since that build keeps working
+# via glibc compatibility even if this base image later moves off bookworm; bump
+# MONGODB_TOOLS_VERSION deliberately, same as the pins in requirements.txt.
+ARG MONGODB_TOOLS_VERSION=100.10.0
+ARG TARGETARCH
+# libgssapi-krb5-2 is a *runtime* dependency of mongodump/mongorestore themselves (confirmed via
+# ldd), not just a build-time need of curl - list it explicitly so apt marks it manually installed
+# and `apt-get autoremove` below doesn't sweep it away as an orphaned transitive dep of curl once
+# curl is purged.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libgssapi-krb5-2 \
+    && case "${TARGETARCH:-amd64}" in \
+         amd64) TOOLS_ARCH=x86_64 ;; \
+         arm64) TOOLS_ARCH=arm64 ;; \
+         *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL -o /tmp/mongodb-database-tools.tgz \
+         "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-${TOOLS_ARCH}-${MONGODB_TOOLS_VERSION}.tgz" \
+    && tar -xzf /tmp/mongodb-database-tools.tgz -C /tmp \
+    && mv /tmp/mongodb-database-tools-*/bin/* /usr/local/bin/ \
+    && rm -rf /tmp/mongodb-database-tools* \
+    && apt-get purge -y curl && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
