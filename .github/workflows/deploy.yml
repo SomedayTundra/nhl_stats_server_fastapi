@@ -1,14 +1,11 @@
-# Redeploys the API + Mongo + Caddy stack on the Lightsail box over SSH.
+# Deploys the API to Fly.io on push to main. The Fly health check on /health (which pings Atlas)
+# gates the rollout, so a build that can't reach Mongo never replaces the running machine.
 #
-# One-time setup before this runs:
+# One-time setup before this runs (see DEPLOYMENT.md):
 #   Repository variable:
-#     DEPLOY_ENABLED     = "true"   (gate; the job is skipped until this is set)
-#   Repository secrets:
-#     LIGHTSAIL_HOST     = the instance's static IP
-#     LIGHTSAIL_USER     = deploy user (e.g. ubuntu)
-#     LIGHTSAIL_SSH_KEY  = private key whose public half is in that user's ~/.ssh/authorized_keys
-#   The box must already have: Docker + compose plugin, the repo cloned at
-#   ~/nhl_stats_server_fastapi, and a populated .env (see .env.example).
+#     DEPLOY_ENABLED  = "true"   (gate; the job is skipped until this is set)
+#   Repository secret:
+#     FLY_API_TOKEN   = output of `fly tokens create deploy -a nhl-stats-api`
 
 name: Deploy server
 
@@ -21,20 +18,18 @@ concurrency:
   group: deploy-server
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            set -e
-            cd ~/nhl_stats_server_fastapi
-            git pull --ff-only
-            docker compose up -d --build
-            docker image prune -f
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

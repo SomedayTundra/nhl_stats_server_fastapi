@@ -4,16 +4,15 @@
 # the target database - this is how a fresh prod deployment gets seeded, and how a bad backup
 # gets rolled back onto.
 #
-# Run from the repo root, inside the api container, as a module:
+# Run from the repo root as a module; it restores into whatever MONGO_URI points at (local mongod
+# by default - set MONGO_URI to the Atlas URI to seed/roll back production):
 #     # interactive - prompts for confirmation before touching anything:
-#     docker compose exec -it api python -m app.scripts.restore_mongo --in /backups/nhl_stats-2026-09-22.archive.gz
+#     python -m app.scripts.restore_mongo --in backups/nhl_stats-2026-09-22.archive.gz
 #     # non-interactive (first-time deploy seeding, CI) - must pass --yes explicitly:
-#     docker compose exec -T api python -m app.scripts.restore_mongo --in /backups/nhl_stats-2026-09-22.archive.gz --yes
+#     python -m app.scripts.restore_mongo --in backups/nhl_stats-2026-09-22.archive.gz --yes
 #
-# Requires the `mongorestore` binary (installed in the api image's Dockerfile via the MongoDB
-# Database Tools tarball). Reads from /backups by default via docker-compose.yml's bind mount to
-# ./backups on the host, so a file copied to ./backups/<name> on the host is at
-# /backups/<name> inside the container.
+# Requires the `mongorestore` binary from the MongoDB Database Tools (not a pip dependency; the api
+# image's Dockerfile also installs it).
 ###################################################
 
 import argparse
@@ -56,13 +55,13 @@ def confirm(in_file: Path, skip: bool) -> None:
     if not sys.stdin.isatty():
         print(
             f"Refusing to restore non-interactively without --yes: this DROPS and replaces "
-            f"every collection in '{mongo.DB_NAME_NHL_STATS}' at {mongo.URI} with the contents "
+            f"every collection in '{mongo.DB_NAME_NHL_STATS}' at {mongo.URI_DISPLAY} with the contents "
             f"of {in_file}.\nRe-run with --yes once you're sure."
         )
         sys.exit(1)
     answer = input(
         f"This will DROP and replace every collection in '{mongo.DB_NAME_NHL_STATS}' at "
-        f"{mongo.URI} with the contents of {in_file}.\n"
+        f"{mongo.URI_DISPLAY} with the contents of {in_file}.\n"
         f"Type the database name ({mongo.DB_NAME_NHL_STATS}) to continue: "
     )
     if answer.strip() != mongo.DB_NAME_NHL_STATS:
@@ -96,7 +95,7 @@ def main() -> None:
         "--drop",
     ]
 
-    print(f"Restoring {args.in_file} -> '{mongo.DB_NAME_NHL_STATS}' at {mongo.URI} (--drop) ...")
+    print(f"Restoring {args.in_file} -> '{mongo.DB_NAME_NHL_STATS}' at {mongo.URI_DISPLAY} (--drop) ...")
     result = subprocess.run(command)
     if result.returncode != 0:
         print(f"mongorestore failed (exit code {result.returncode}); database may be partially restored.")

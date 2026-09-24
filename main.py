@@ -24,6 +24,9 @@ app = FastAPI()
 # unset we fall back to the local dev origins. allow_credentials=True rules out a "*" wildcard.
 _default_origins = "http://localhost,http://localhost:5173"
 origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", _default_origins).split(",") if o.strip()]
+# Optional extra origins by pattern - production uses it for the client's Vercel preview
+# deployments, whose hostnames change per branch/commit.
+origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX") or None
 
 # Starlette types add_middleware() with a ParamSpec that PyCharm's checker can't resolve, so it
 # wrongly flags CORSMiddleware below. The call is correct.
@@ -31,6 +34,7 @@ origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", _default_origins).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Cookie", "Origin"],

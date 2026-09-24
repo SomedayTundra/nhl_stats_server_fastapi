@@ -3,16 +3,15 @@
 # via the mongodump CLI (not a pymongo export) so indexes and BSON types round-trip exactly
 # through restore_mongo.py.
 #
-# Run from the repo root, inside the api container, as a module:
-#     docker compose exec -T api python -m app.scripts.backup_mongo
-#     docker compose exec -T api python -m app.scripts.backup_mongo --out-dir /backups
-#     docker compose exec -T api python -m app.scripts.backup_mongo --out /backups/manual.archive.gz
+# Run from the repo root as a module; it dumps whatever MONGO_URI points at (local mongod by
+# default, or Atlas when MONGO_URI is set to the production URI):
+#     python -m app.scripts.backup_mongo
+#     python -m app.scripts.backup_mongo --out-dir some/dir
+#     python -m app.scripts.backup_mongo --out backups/manual.archive.gz
 #
-# Requires the `mongodump` binary (installed in the api image's Dockerfile via the MongoDB
-# Database Tools tarball - not a pip dependency). Writes into /backups by default, which
-# docker-compose.yml bind-mounts to ./backups on the host, so the archive survives container
-# restarts/rebuilds and is reachable for scp/S3 upload from the host afterward. This script does
-# not upload anywhere itself - see DEPLOYMENT.md for the manual/cron hand-off.
+# Requires the `mongodump` binary from the MongoDB Database Tools (not a pip dependency; the api
+# image's Dockerfile also installs it). Writes into ./backups (gitignored) by default. This script
+# does not upload anywhere itself - see DEPLOYMENT.md.
 ###################################################
 
 import argparse
@@ -28,7 +27,7 @@ load_dotenv()
 
 from app.constants import mongo_db_constants as mongo
 
-DEFAULT_OUT_DIR = Path("/backups")
+DEFAULT_OUT_DIR = Path("backups")
 
 
 def parse_args():
@@ -77,7 +76,7 @@ def main() -> None:
         f"--archive={out_path}",
     ]
 
-    print(f"Dumping '{mongo.DB_NAME_NHL_STATS}' from {mongo.URI} -> {out_path} ...")
+    print(f"Dumping '{mongo.DB_NAME_NHL_STATS}' from {mongo.URI_DISPLAY} -> {out_path} ...")
     result = subprocess.run(command)
     if result.returncode != 0:
         print(f"mongodump failed (exit code {result.returncode}); no archive to trust at {out_path}.")
@@ -85,9 +84,6 @@ def main() -> None:
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print(f"Done. Wrote {out_path} ({size_mb:.1f} MB).")
-    print("Copy it off the box, e.g.:")
-    print(f"  scp <user>@<host>:~/nhl_stats_server_fastapi/backups/{out_path.name} .")
-    print(f"  aws s3 cp backups/{out_path.name} s3://<backup-bucket>/{out_path.name}")
 
 
 if __name__ == "__main__":

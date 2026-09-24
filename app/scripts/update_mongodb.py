@@ -315,7 +315,7 @@ args = parse_args()
 mongo_client = MongoClient(mongo.URI)
 try:
     # connect to MongoDB
-    print(f"Attempting to connect to: {mongo.URI}")
+    print(f"Attempting to connect to: {mongo.URI_DISPLAY}")
     mongo_client.admin.command("ping")
     print(f"Connected successfully [{mongo_client.address}]")
     database = mongo_client[mongo.DB_NAME_NHL_STATS]
@@ -365,7 +365,7 @@ for season in seasons_to_run:
 # all done; close the connection to the database
 try:
     # close the connection to MongoDB
-    print(f"Closing connection to: {mongo.URI}")
+    print(f"Closing connection to: {mongo.URI_DISPLAY}")
     mongo_client.close()
 except Exception as e:
     raise Exception("  The following error occurred: ", e)

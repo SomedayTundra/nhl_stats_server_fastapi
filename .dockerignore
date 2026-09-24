@@ -11,3 +11,12 @@ venv/
 !.env.example
 *.log
 README.md
+DEPLOYMENT.md
+node_modules/
+backups/
+scripts/
+package.json
+package-lock.json
+svgo.config.mjs
+fly.toml
+.github/

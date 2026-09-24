@@ -1,0 +1,88 @@
+# Farms NHL standings into the production (Atlas) database once a day. With no season given,
+# update_mongodb.py farms the most recently started season, skips days already stored and stops at
+# today, so off-season runs are no-ops.
+#
+# A newly seen team's logo SVG gets downloaded into app/logos/, which is lost with the runner - so
+# when that happens the PNGs are rebuilt and a PR is opened; merging it redeploys the API with the
+# new logos (deploy.yml).
+#
+# One-time setup:
+#   Repository variable: DEPLOY_ENABLED = "true"   (shared gate with deploy.yml)
+#   Repository secret:   MONGO_URI = the Atlas mongodb+srv://... URI
+#   Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"
+# Note: GitHub pauses scheduled workflows after 60 days without repository activity.
+
+name: Farm standings
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # ~7am ET, after every North American game has finished
+  workflow_dispatch:
+    inputs:
+      season_id:
+        description: 'Optional seasonId, e.g. 20252026 (blank = current season)'
+        required: false
+        default: ''
+
+concurrency:
+  group: farm
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  farm:
+    # same gate as deploy.yml, so the schedule doesn't fail daily before Atlas/secrets exist
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Farm
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          SEASON_ID: ${{ inputs.season_id }}
+        run: |
+          if [ -n "$SEASON_ID" ]; then
+            [[ "$SEASON_ID" =~ ^[0-9]{8}$ ]] || { echo "season_id must be 8 digits" >&2; exit 1; }
+            python -m app.scripts.update_mongodb "$SEASON_ID"
+          else
+            python -m app.scripts.update_mongodb
+          fi
+
+      - name: Detect new logos
+        id: logos
+        run: |
+          if [ -n "$(git status --porcelain app/logos)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git status --porcelain app/logos
+          fi
+
+      - if: steps.logos.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - if: steps.logos.outputs.changed == 'true'
+        run: npm install && npm run build:logos
+
+      - if: steps.logos.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: farm/new-logos
+          add-paths: app/logos
+          commit-message: add logos for newly farmed teams
+          title: New team logos from the daily farm
+          body: |
+            `update_mongodb.py` downloaded logos for a team it hadn't seen before; `npm run build:logos`
+            optimized them and rendered the 1x/2x PNGs. Merging redeploys the API so `/logo` serves them.
