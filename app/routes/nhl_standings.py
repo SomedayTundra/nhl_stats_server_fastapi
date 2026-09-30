@@ -220,6 +220,7 @@ async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date:
             team_abbrev=meta["teamAbbrev"],
             team_common_name=meta["teamCommonName"],
             logo=meta["localLogo"],
+            chart_line_color=meta.get("chartLineColor"),
             wins=entry["wins"],
             losses=entry["losses"],
             ot_losses=entry["ot_losses"],

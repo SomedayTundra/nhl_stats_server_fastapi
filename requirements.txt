@@ -8,3 +8,6 @@ httpx==0.28.1
 pydantic==2.12.5
 email-validator==2.3.0
 python-dotenv==1.2.2
+# pillow and resvg-py are used to rasterize + measure team logos for their chart line color (app/lib/chart_line_color.py)
+pillow==12.3.0
+resvg-py==0.5.0

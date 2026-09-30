@@ -27,6 +27,7 @@ from calendar import monthrange
 load_dotenv()
 
 from app.constants import mongo_db_constants as mongo
+from app.lib.chart_line_color import recolor_season
 
 ############################################
 # DEBUG FLAGS
@@ -255,6 +256,10 @@ def store_standings_in_mongo(standings_list: list[Any]):
                 image_url = team["teamLogo"]
                 if not does_local_image_exist(image_url):
                     save_image_file(image_url)
+
+                # recolor the whole season, not just this team: a newcomer can take a color
+                # another team was already using, which nudges that team onto its next one
+                recolor_season(collection_teams_data, season_id)
 
             team_standings = {
                 "name": team["teamName"]["default"],

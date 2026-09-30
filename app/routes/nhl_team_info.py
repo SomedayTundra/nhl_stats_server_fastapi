@@ -163,7 +163,8 @@ async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=Non
                 "conference_name": {"$ifNull": ["$conferenceName", "NA"]},
                 "conference_abbrev": {"$ifNull": ["$conferenceAbbrev", "NA"]},
                 "division_name": "$divisionName",
-                "division_abbrev": "$divisionAbbrev"
+                "division_abbrev": "$divisionAbbrev",
+                "chart_line_color": "$chartLineColor"
             }
         }
     )
@@ -182,6 +183,7 @@ async def get_nhl_team_info(teams:Optional[str]=None, division:Optional[str]=Non
             conference_abbrev = entry.get("conference_abbrev", "NA"),
             division_name = entry["division_name"],
             division_abbrev = entry["division_abbrev"],
+            chart_line_color = entry.get("chart_line_color"),
         )
         team_info_results.append(new_team_info)
 

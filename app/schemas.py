@@ -24,6 +24,7 @@ class TeamInfo(CamelModel):
     conference_abbrev: str = "NA"
     division_name: str
     division_abbrev: str
+    chart_line_color: Optional[str] = None
 
 
 class TeamStanding(CamelModel):
@@ -34,6 +35,7 @@ class TeamStanding(CamelModel):
     team_common_name: str
     team_abbrev: str
     logo: str
+    chart_line_color: Optional[str] = None
     wins: int
     losses: int
     ot_losses: int
