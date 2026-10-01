@@ -1,6 +1,7 @@
 # Farms NHL standings into the production (Atlas) database once a day. With no season given,
 # update_mongodb.py farms the most recently started season, skips days already stored and stops at
-# today, so off-season runs are no-ops.
+# yesterday (a stored day is never refreshed, so today's in-progress standings must not be saved),
+# so off-season runs are no-ops.
 #
 # A newly seen team's logo SVG gets downloaded into app/logos/, which is lost with the runner - so
 # when that happens the PNGs are rebuilt and a PR is opened; merging it redeploys the API with the

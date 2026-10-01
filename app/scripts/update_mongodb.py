@@ -13,7 +13,7 @@
 
 import argparse
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -173,15 +173,17 @@ def farm_standings_for_month(year, month):
         (last_day_in_month - 4) if DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH else 1
     )
 
-    today = date.today()
+    # stop at yesterday: a day's snapshot is frozen once stored (existing days are skipped), so
+    # farming today would freeze a pre-game or mid-game state
+    yesterday = date.today() - timedelta(days=1)
     for day in range(range_start, last_day_in_month + 1):
         target_date_string = f"{year}-{month:02d}-{day:02d}"
         print(f"  ..{target_date_string}", end="")
 
-        # if the day is greater-than today, we can bail
+        # if the day is later than yesterday, we can bail
         target_date = date.fromisoformat(target_date_string)
-        if target_date > today:
-            print(f" ....{target_date} is greater than today ({today}), so we're done!")
+        if target_date > yesterday:
+            print(f" ....{target_date} is later than yesterday ({yesterday}), so we're done!")
             break
 
         farm_standings_for_day(daily_standings_for_the_entire_month, target_date_string)
