@@ -9,7 +9,7 @@ Full-system runbook. The client repo (`nhl_stats_client_react`) has a short poin
 | React client | **Vercel**, `www.somedaytundra.com` (apex redirects to `www`) | push to client `main` (Vercel GitHub integration); previews per PR |
 | FastAPI | **Fly.io** app `nhl-stats-api`, `api.somedaytundra.com` | push to this repo's `main` (`.github/workflows/deploy.yml`) |
 | MongoDB | **Atlas M0** (free, AWS us-east-1), database `nhl_stats` | — |
-| Farming | GitHub Actions, daily 11:00 UTC (`.github/workflows/farm.yml`) | schedule / manual dispatch |
+| Farming | GitHub Actions (`.github/workflows/farm.yml`), dispatched daily ~11:00 UTC by a Vercel Cron Job in the client repo (`api/trigger-farm.ts`); GitHub `schedule` at 14:37 UTC as a fallback | Vercel Cron / schedule / manual dispatch |
 | DNS | Route 53 zone `somedaytundra.com` (domain registered at AWS) | — |
 
 Cost: Vercel Hobby $0, Atlas M0 $0, Fly ~$3–4/mo (one always-on shared-cpu-1x 512 MB machine),
@@ -103,11 +103,20 @@ asks for one). `fly certs show api.somedaytundra.com` should reach **Issued** wi
 **Deploys** are automatic: merge to `main`. A build that fails the `/health` check never replaces
 the running machine. Roll back with `fly releases` + `fly deploy --image <previous image>`.
 
-**Farming** runs daily. Run it by hand from Actions → Farm standings → Run workflow (optionally
+**Farming** runs daily. The client project's Vercel Cron Job calls `workflow_dispatch` on
+`farm.yml` at ~11:00 UTC (GitHub's own `schedule` trigger ran hours late, so it's now only a
+14:37 UTC fallback; the second run is a no-op). That needs two Vercel env vars, documented in the
+client repo's `DEPLOYMENT.md`. Run it by hand from Actions → Farm standings → Run workflow (optionally
 with a `season_id`), or locally against Atlas:
 ```bash
-MONGO_URI='mongodb+srv://...' python -m app.scripts.update_mongodb 20252026
+MONGO_URI='mongodb+srv://...' python -m app.scripts.update_mongodb 20252026 --triggered-by "my laptop"
 ```
+Every run, wherever it ran, inserts a document into the `farm_runs` collection: start/end time,
+duration, status (`success` or the error), `trigger` (`scheduled`, `dispatch` or `manual`), the
+optional `triggered_by` note (`vercel-cron (...)` for the cron), host, OS user, and in Actions
+the actor and run URL. It also appends the same thing as one line to
+`app/scripts/update_mongo.log` on the machine that ran it (gitignored; useful for local runs, gone
+with the runner in Actions).
 When it sees a new team it downloads the logo SVG into `app/logos/`; the workflow then runs
 `npm run build:logos` and opens a `farm/new-logos` PR. Merge it to ship the logos. (Run locally,
 do the same by hand: `npm install && npm run build:logos`, commit.) GitHub pauses scheduled

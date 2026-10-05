@@ -7,13 +7,19 @@
 # Run from the repo root as a module so `from app.constants ...` resolves:
 #     python -m app.scripts.update_mongodb            # current season
 #     python -m app.scripts.update_mongodb 19891990   # one specific season
+#     python -m app.scripts.update_mongodb --triggered-by "my laptop"   # tag who launched it
+#
+# Every run appends a line to update_mongo.log (next to this file) and inserts the same record
+# into the farm_runs collection - the file alone would vanish with a GitHub Actions runner.
 #
 ###################################################
 
 
 import argparse
+import getpass
 import os
-from datetime import date, timedelta
+import socket
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +63,9 @@ EARLIEST_SEASON_ID = 19421943
 
 ############################################
 
+# per-run log, colocated with this script (see record_run)
+RUN_LOG_PATH = Path(__file__).with_name("update_mongo.log")
+
 # app/logos, resolved relative to this file so it works regardless of CWD or OS
 LOCAL_IMAGE_FOLDER = str(Path(__file__).resolve().parents[1] / "logos")
 
@@ -89,7 +98,68 @@ def parse_args():
         help="Restrict the run to a single seasonId (e.g. 19891990 for the 1989-90 "
         "season). If omitted, falls back to SEASONS_TO_PROCESS.",
     )
+    parser.add_argument(
+        "--triggered-by",
+        default=os.getenv("FARM_TRIGGERED_BY") or None,
+        help="Free-form note on who/what launched this run (e.g. 'vercel-cron', 'my laptop'); "
+        "recorded in update_mongo.log and the farm_runs collection. Defaults to the "
+        "FARM_TRIGGERED_BY env var.",
+    )
     return parser.parse_args()
+
+
+def build_run_context(args) -> dict[str, Any]:
+    # GitHub Actions tells us how it was started; anything outside Actions is someone running the
+    # script by hand
+    event = os.getenv("GITHUB_EVENT_NAME")
+    trigger = {"schedule": "scheduled", "workflow_dispatch": "dispatch"}.get(event, "manual")
+    try:
+        os_user = getpass.getuser()
+    except Exception:
+        os_user = None
+
+    context = {
+        "trigger": trigger,
+        "triggered_by": args.triggered_by,
+        "host": socket.gethostname(),
+        "os_user": os_user,
+        "season_arg": args.season_id,
+    }
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        context["github_actor"] = os.getenv("GITHUB_ACTOR")
+        context["github_run_id"] = os.getenv("GITHUB_RUN_ID")
+        context["github_run_url"] = (
+            f"{os.getenv('GITHUB_SERVER_URL')}/{os.getenv('GITHUB_REPOSITORY')}"
+            f"/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
+        )
+    return context
+
+
+def record_run(record: dict[str, Any], database=None):
+    # each write is best-effort on its own: a logging failure must neither mask the farm's real
+    # error nor fail a farm that otherwise succeeded
+    started = record["started_at"].astimezone().isoformat(timespec="seconds")
+    ended = record["ended_at"].astimezone().isoformat(timespec="seconds")
+    # status and triggered_by are free text, so they're quoted to keep the line splittable
+    line = (
+        f"start={started} end={ended} dur={record['duration_s']}s "
+        f"status=\"{record['status']}\" trigger={record['trigger']} "
+        f"by=\"{record['triggered_by'] or ''}\" host={record['host']} "
+        f"user={record['os_user'] or '-'} season={record['season_arg'] or 'current'}"
+    )
+    if record.get("github_run_url"):
+        line += f" actor={record['github_actor']} run={record['github_run_url']}"
+    try:
+        with open(RUN_LOG_PATH, "a", encoding="utf-8") as log_file:
+            log_file.write(line + "\n")
+    except Exception as e:
+        print(f"WARNING: couldn't append to {RUN_LOG_PATH}: {e}")
+
+    if database is not None:
+        try:
+            database[mongo.COLLECTION_FARM_RUNS].insert_one(dict(record))
+        except Exception as e:
+            print(f"WARNING: couldn't record this run in {mongo.COLLECTION_FARM_RUNS}: {e}")
 
 
 def most_recently_started_season(season_manifest, today=None):
@@ -319,60 +389,78 @@ def store_standings_in_mongo(standings_list: list[Any]):
 ########################################
 args = parse_args()
 
+# what update_mongo.log / farm_runs get for this run; filled in by the finally block below
+run_record = build_run_context(args)
+run_record["started_at"] = datetime.now(timezone.utc)
+run_status = "success"
+database = None
+
 mongo_client = MongoClient(mongo.URI)
 try:
-    # connect to MongoDB
-    print(f"Attempting to connect to: {mongo.URI_DISPLAY}")
-    mongo_client.admin.command("ping")
-    print(f"Connected successfully [{mongo_client.address}]")
-    database = mongo_client[mongo.DB_NAME_NHL_STATS]
-except Exception as e:
-    raise Exception("  The following error occurred: ", e)
+    try:
+        # connect to MongoDB
+        print(f"Attempting to connect to: {mongo.URI_DISPLAY}")
+        mongo_client.admin.command("ping")
+        print(f"Connected successfully [{mongo_client.address}]")
+        database = mongo_client[mongo.DB_NAME_NHL_STATS]
+    except Exception as e:
+        raise Exception("  The following error occurred: ", e)
 
-########################################
-# DEBUG: possibly nuke the team data collection
-if DEBUG_RESET_COLLECTION__TEAM_DATA:
-    print(f'!!Dropping collection "{mongo.COLLECTION_TEAM_DATA}" for a fresh start!!')
-    database.drop_collection(mongo.COLLECTION_TEAM_DATA)
+    ########################################
+    # DEBUG: possibly nuke the team data collection
+    if DEBUG_RESET_COLLECTION__TEAM_DATA:
+        print(f'!!Dropping collection "{mongo.COLLECTION_TEAM_DATA}" for a fresh start!!')
+        database.drop_collection(mongo.COLLECTION_TEAM_DATA)
 
-# DEBUG: possibly nuke the "stats for the current season" collection
-if DEBUG_RESET_COLLECTION__TEAM_STANDINGS:
-    print(f'!!Dropping collection "{mongo.COLLECTION_TEAM_STANDINGS}" for a fresh start!!')
-    database.drop_collection(mongo.COLLECTION_TEAM_STANDINGS)
-#
-########################################
+    # DEBUG: possibly nuke the "stats for the current season" collection
+    if DEBUG_RESET_COLLECTION__TEAM_STANDINGS:
+        print(f'!!Dropping collection "{mongo.COLLECTION_TEAM_STANDINGS}" for a fresh start!!')
+        database.drop_collection(mongo.COLLECTION_TEAM_STANDINGS)
+    #
+    ########################################
 
-# create simplified teams_data and team_standings documents
-collection_teams_data = database[mongo.COLLECTION_TEAM_DATA]
-collection_team_standings = database[mongo.COLLECTION_TEAM_STANDINGS]
+    # create simplified teams_data and team_standings documents
+    collection_teams_data = database[mongo.COLLECTION_TEAM_DATA]
+    collection_team_standings = database[mongo.COLLECTION_TEAM_STANDINGS]
 
-# grab the standings for all the days in every month of every season we're processing this run
-print()
+    # grab the standings for all the days in every month of every season we're processing this run
+    print()
 
-season_manifest = get_season_manifest()
-if args.season_id is not None:
-    seasons_to_run = [season_by_id(season_manifest, args.season_id)]
-elif SEASONS_TO_PROCESS == "current_only":
-    seasons_to_run = [most_recently_started_season(season_manifest)]
-else:
-    seasons_to_run = season_manifest
+    season_manifest = get_season_manifest()
+    if args.season_id is not None:
+        seasons_to_run = [season_by_id(season_manifest, args.season_id)]
+    elif SEASONS_TO_PROCESS == "current_only":
+        seasons_to_run = [most_recently_started_season(season_manifest)]
+    else:
+        seasons_to_run = season_manifest
 
-for season in seasons_to_run:
-    season_start = date.fromisoformat(season["standingsStart"])
-    season_end = date.fromisoformat(season["standingsEnd"])
-    print(f"Farming season {season['id']} ({season_start} to {season_end}):")
+    for season in seasons_to_run:
+        season_start = date.fromisoformat(season["standingsStart"])
+        season_end = date.fromisoformat(season["standingsEnd"])
+        print(f"Farming season {season['id']} ({season_start} to {season_end}):")
 
-    for year, month in months_spanning(season_start, season_end):
-        standings_for_month = farm_standings_for_month(year, month)
-        store_standings_in_mongo(standings_for_month)
+        for year, month in months_spanning(season_start, season_end):
+            standings_for_month = farm_standings_for_month(year, month)
+            store_standings_in_mongo(standings_for_month)
 
-        # all done; how about a blank line?
-        print()
+            # all done; how about a blank line?
+            print()
+except BaseException as e:
+    # BaseException so a Ctrl+C'd run is logged too; the bare raise keeps the non-zero exit
+    run_status = f"error: {type(e).__name__}: {e}"
+    raise
+finally:
+    run_record["ended_at"] = datetime.now(timezone.utc)
+    run_record["duration_s"] = round(
+        (run_record["ended_at"] - run_record["started_at"]).total_seconds(), 1
+    )
+    run_record["status"] = run_status
+    record_run(run_record, database)
 
-# all done; close the connection to the database
-try:
-    # close the connection to MongoDB
-    print(f"Closing connection to: {mongo.URI_DISPLAY}")
-    mongo_client.close()
-except Exception as e:
-    raise Exception("  The following error occurred: ", e)
+    # all done; close the connection to the database
+    try:
+        # close the connection to MongoDB
+        print(f"Closing connection to: {mongo.URI_DISPLAY}")
+        mongo_client.close()
+    except Exception as e:
+        raise Exception("  The following error occurred: ", e)

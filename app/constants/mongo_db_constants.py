@@ -17,6 +17,8 @@ DB_NAME_NHL_STATS = "nhl_stats"
 COLLECTION_TEAM_DATA = "team_data"
 COLLECTION_TEAM_STANDINGS = "team_standings"
 COLLECTION_SEASON_INFO = "seasonInfo"
+# one document per update_mongodb.py run: when, how long, outcome, and who/what launched it
+COLLECTION_FARM_RUNS = "farm_runs"
 
 COLLECTION_USER_DATA = "user_data"
 

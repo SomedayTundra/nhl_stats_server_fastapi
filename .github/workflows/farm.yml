@@ -1,7 +1,12 @@
-# Farms NHL standings into the production (Atlas) database once a day. With no season given,
-# update_mongodb.py farms the most recently started season, skips days already stored and stops at
-# yesterday (a stored day is never refreshed, so today's in-progress standings must not be saved),
-# so off-season runs are no-ops.
+# Farms NHL standings into the production (Atlas) database once a day. The primary trigger is a
+# Vercel Cron Job in the client project (api/trigger-farm.ts) that calls workflow_dispatch at ~11:00
+# UTC: GitHub's own `schedule` trigger is best-effort and was routinely starting 4-8 hours late.
+# The schedule below is kept as a later fallback - a second run the same day is a no-op, since
+# stored days are skipped. Each run is logged to the farm_runs collection (see update_mongodb.py).
+#
+# With no season given, update_mongodb.py farms the most recently started season, skips days
+# already stored and stops at yesterday (a stored day is never refreshed, so today's in-progress
+# standings must not be saved), so off-season runs are no-ops.
 #
 # A newly seen team's logo SVG gets downloaded into app/logos/, which is lost with the runner - so
 # when that happens the PNGs are rebuilt and a PR is opened; merging it redeploys the API with the
@@ -17,11 +22,16 @@ name: Farm standings
 
 on:
   schedule:
-    - cron: '0 11 * * *'   # ~7am ET, after every North American game has finished
+    # fallback only (see top); off the top of the hour, where GitHub's queue is busiest
+    - cron: '37 14 * * *'
   workflow_dispatch:
     inputs:
       season_id:
         description: 'Optional seasonId, e.g. 20252026 (blank = current season)'
+        required: false
+        default: ''
+      triggered_by:
+        description: 'Optional note on who/what started this run (recorded in farm_runs)'
         required: false
         default: ''
 
@@ -53,6 +63,7 @@ jobs:
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           SEASON_ID: ${{ inputs.season_id }}
+          FARM_TRIGGERED_BY: ${{ inputs.triggered_by }}
         run: |
           if [ -n "$SEASON_ID" ]; then
             [[ "$SEASON_ID" =~ ^[0-9]{8}$ ]] || { echo "season_id must be 8 digits" >&2; exit 1; }
