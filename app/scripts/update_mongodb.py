@@ -50,6 +50,14 @@ DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
 # if True, more verbose debug output is included
 DEBUG_VERBOSE = False
 
+# if True, overwrite any existing team_standings data (useful for backfilling
+# old data when we've decided to add new field(s)
+#
+# TODO: THIS CURRENTLY ONLY APPLIES TO TEAM_STANDINGS, EITHER MAKE IT APPLY TO
+#       EVERYTHING, OR ADD DIFFERENT FLAGS TO DO THE SAME FOR OTHER COLLECTIONS
+#
+DEBUG_BACKFILL_ALWAYS_OVERWRITE_CACHED_DATA = False
+
 ############################################
 
 # which seasons to farm on this run: "current_only" farms just the latest season (self-updating,
@@ -109,9 +117,8 @@ def parse_args():
 
 
 def build_run_context(args) -> dict[str, Any]:
-    # GitHub Actions tells us how it was started; anything outside Actions is someone running the
-    # script by hand
-    event = os.getenv("GITHUB_EVENT_NAME")
+    # GitHub Actions tells us how it was started; anything outside Actions is someone running the script by hand
+    event = os.getenv("GITHUB_EVENT_NAME", "")
     trigger = {"schedule": "scheduled", "workflow_dispatch": "dispatch"}.get(event, "manual")
     try:
         os_user = getpass.getuser()
@@ -264,7 +271,7 @@ def farm_standings_for_month(year, month):
 def farm_standings_for_day(standings_list: list[Any], target_date_string: str):
     # if we already have data for this day, skip it
     find_one_result = collection_team_standings.find_one({"date": target_date_string})
-    if find_one_result:
+    if find_one_result and not DEBUG_BACKFILL_ALWAYS_OVERWRITE_CACHED_DATA:
         print(" ..Data already exists in our database for this day, moving on..")
     else:
         daily_standings = nhl_client.standings.league_standings(date=target_date_string)
@@ -333,17 +340,26 @@ def store_standings_in_mongo(standings_list: list[Any]):
                 # another team was already using, which nudges that team onto its next one
                 recolor_season(collection_teams_data, season_id)
 
+            # stupidly, the NHL API will not include a winPctg or pointPctg at all if the
+            # the actual values are zero (as they are for most teams for a certain length
+            # of time at the start of a season)
+            winPctgSealed = team.get("winPctg", 0.0)
+            pointPctgSealed = team.get("pointPctg", 0.0)
             team_standings = {
                 "name": team["teamName"]["default"],
                 "common_name": team["teamCommonName"],
                 "abbrev": team["teamAbbrev"],
+                "games_played": team["gamesPlayed"],
+                "win_pctg": winPctgSealed,
                 "wins": team["wins"],
                 "losses": team["losses"],
                 "ot_losses": team["otLosses"],
                 "points": team["points"],
+                "point_pctg": pointPctgSealed,
                 "goals_for": team["goalFor"],
                 "goals_against": team["goalAgainst"],
                 "goal_diff": team["goalDifferential"],
+
                 # the NHL API's own last-10 tallies, which it supplies for every era back to
                 # 1942-43. Pre-shootout seasons report l10OtLosses as 0 and put those games in
                 # l10Ties instead; 1999-2000 through 2003-04 are the only seasons where both can
