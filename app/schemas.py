@@ -36,10 +36,13 @@ class TeamStanding(CamelModel):
     team_abbrev: str
     logo: str
     chart_line_color: Optional[str] = None
+    games_played: int
+    win_pctg: float
     wins: int
     losses: int
     ot_losses: int
     points: int
+    point_pctg: float
     goals_for: int
     goals_against: int
     goal_diff: int
