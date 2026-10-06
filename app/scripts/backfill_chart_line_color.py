@@ -39,6 +39,7 @@ def parse_args():
 
 def main() -> None:
     args = parse_args()
+    print(f"Backfilling team colors to MongoDB at: {mongo.URI_DISPLAY}")
     collection_team_data = mongo.client[mongo.DB_NAME_NHL_STATS][mongo.COLLECTION_TEAM_DATA]
 
     if args.season_id is not None:
