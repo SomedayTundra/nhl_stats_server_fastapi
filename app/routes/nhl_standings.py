@@ -3,7 +3,6 @@ import logging
 import os
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
@@ -29,12 +28,11 @@ from app.constants import mongo_db_constants as mongo
 
 ############################
 # MISC
-from datetime import datetime
-def fresh_today():
-    live_today = datetime.today()
-    return live_today.strftime('%Y-%m-%d')
-
-LAST_DAY_OF_2026_SEASON = '2026-04-17'
+from datetime import date, timedelta
+def get_yesterday():
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    return yesterday.isoformat()
 
 ############################
 # ON-DEMAND FARMING
@@ -118,7 +116,7 @@ async def _ensure_season_cached(season_id: int) -> None:
 # ROUTE:  "/api/nhl_standings"
 #
 @router.get("/", response_model=list[TeamStanding])
-async def get_nhl_standings(start_date: str = LAST_DAY_OF_2026_SEASON, end_date: str = LAST_DAY_OF_2026_SEASON, teams: Optional[str] = None, season_id: Optional[int] = None):
+async def get_nhl_standings(start_date: str = get_yesterday(), end_date: str = get_yesterday(), teams: Optional[str] = None, season_id: Optional[int] = None):
     """Retrieve all team standings data from the start date to the end date, inclusive"""
     db_nhl_stats = mongo.client[mongo.DB_NAME_NHL_STATS]
     collection_user_data = db_nhl_stats[mongo.COLLECTION_USER_DATA]
