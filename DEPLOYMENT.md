@@ -32,6 +32,8 @@ well under M0's 512 MB.
 | `CORS_ALLOW_ORIGINS` | Fly secret | `https://www.somedaytundra.com,https://somedaytundra.com` |
 | `CORS_ALLOW_ORIGIN_REGEX` | Fly secret | Lets the client's Vercel previews call the API: `^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$` |
 | `ENABLE_ONDEMAND_FARMING` | `fly.toml` `[env]` | `false` — the farm job keeps the DB current instead. |
+| `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Fly secrets | Read-only proxy behind `/api/jira` for the client's `/jira` page. Use a scoped token (`read:jira-work`, `read:jira-user`) with `https://api.atlassian.com/ex/jira/<cloudId>`. Unset → those routes answer 503. |
+| `JIRA_PROJECT_KEY` | `fly.toml` `[env]` (optional) | The one space the proxy exposes; defaults to `NHL`. |
 | `HOST` / `PORT` | local only | Used by `python main.py`; the container's CMD pins 8000. |
 
 ## First-time setup (in order)
@@ -68,7 +70,10 @@ fly auth signup            # or: fly auth login
 fly launch --no-deploy --copy-config   # keep the committed fly.toml; pick a new app name if taken
 fly secrets set MONGO_URI='mongodb+srv://...' \
   CORS_ALLOW_ORIGINS='https://www.somedaytundra.com,https://somedaytundra.com' \
-  CORS_ALLOW_ORIGIN_REGEX='^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$'
+  CORS_ALLOW_ORIGIN_REGEX='^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$' \
+  JIRA_BASE_URL='https://api.atlassian.com/ex/jira/<cloudId>' \
+  JIRA_EMAIL='<your Atlassian login email>' \
+  JIRA_API_TOKEN='<scoped token: read:jira-work, read:jira-user>'
 fly deploy
 curl https://nhl-stats-api.fly.dev/health          # -> {"status":"ok"}
 ```
