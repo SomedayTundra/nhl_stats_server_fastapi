@@ -51,7 +51,8 @@ ICON_HEADERS = {
     "X-Content-Type-Options": "nosniff",
 }
 
-_LIST_FIELDS = "summary,status,issuetype,priority,assignee,created,updated"
+_LIST_FIELDS = "summary,status,issuetype,components,priority,assignee,created,updated"
+# _LIST_FIELDS = "summary,status,issuetype,priority,assignee,created,updated"
 _DETAIL_FIELDS = ",".join([
     "summary", "status", "issuetype", "priority", "assignee", "reporter", "labels", "components",
     "fixVersions", "parent", "subtasks", "issuelinks", "created", "updated", "resolutiondate", "description",
@@ -163,6 +164,7 @@ def _issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
     fields = issue.get("fields") or {}
     return {
         **_issue_ref(issue),
+        "components": [_named(c) for c in fields.get("components") or []],
         "priority": _named(fields.get("priority")),
         "assignee": _user(fields.get("assignee")),
         "created": fields.get("created"),
