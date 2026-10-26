@@ -1,0 +1,25 @@
+#.github/workflows/patch-notes-trigger.yml (server repo)
+#
+# Server commits are going to poke the client repo to cause the patch notes draft
+# workflow to execute, which causes both the client and server repos to be scanned 
+# for "undocumented" (in the context of patch notes) commits.  Normally we might 
+# not do this, but as a piece of "example/resume code" this project had a view in 
+# the client that displays those patch notes.
+#
+# Needs repo secret CLIENT_REPO_TOKEN, a fine-grained PAT on the client repo
+# (nhl_stats_client_react) with Actions: Read and Write
+
+name: Patch Notes Trigger
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run patch-notes-draft.yml --repo SomedayTundra/nhl_stats_client_react --ref main
+        env:
+          GH_TOKEN: ${{secrets.CLIENT_REPO_TOKEN}}
+          
