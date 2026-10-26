@@ -44,9 +44,6 @@ DEBUG_RESET_COLLECTION__TEAM_STANDINGS = False
 # if True, we nuke and rebuild the 'team_data' collection
 DEBUG_RESET_COLLECTION__TEAM_DATA = False
 
-# if True, we only operate on the last four days of any given month
-DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH = False
-
 # if True, more verbose debug output is included
 DEBUG_VERBOSE = False
 
@@ -56,7 +53,7 @@ DEBUG_VERBOSE = False
 # TODO: THIS CURRENTLY ONLY APPLIES TO TEAM_STANDINGS, EITHER MAKE IT APPLY TO
 #       EVERYTHING, OR ADD DIFFERENT FLAGS TO DO THE SAME FOR OTHER COLLECTIONS
 #
-DEBUG_BACKFILL_ALWAYS_OVERWRITE_CACHED_DATA = False
+DEBUG_BACKFILL_ALWAYS_OVERWRITE_CACHED_TEAM_STANDINGS_DATA = False
 
 ############################################
 
@@ -235,25 +232,22 @@ def save_image_file(image_url, local_save_folder=LOCAL_IMAGE_FOLDER):
                 print(f"Failed to download: {image_url}")
 
 
-def farm_standings_for_month(year, month):
+def farm_standings_for_month(year, month, start_day_of_the_month, end_day_of_the_month):
     print(f"Farming standings data for {month}-{year}:")
 
     # suss out what the last day of the given month is; monthrange is clever enough to account for leap years
-    last_day_in_month = monthrange(year, month)[1]
+    last_day_in_month = min(end_day_of_the_month, monthrange(year, month)[1])
 
     if DEBUG_VERBOSE:
         print(f"..last_day_in_month: {last_day_in_month}")
 
     # build an appropriately-shaped 'target date' and ask the NHL API for the league standings on that day
     daily_standings_for_the_entire_month = []
-    range_start = (
-        (last_day_in_month - 4) if DEBUG_ONLY_FETCH_LAST_FOUR_DAYS_OF_MONTH else 1
-    )
 
     # stop at yesterday: a day's snapshot is frozen once stored (existing days are skipped), so
     # farming today would freeze a pre-game or mid-game state
     yesterday = date.today() - timedelta(days=1)
-    for day in range(range_start, last_day_in_month + 1):
+    for day in range(start_day_of_the_month, last_day_in_month + 1):
         target_date_string = f"{year}-{month:02d}-{day:02d}"
         print(f"  ..{target_date_string}", end="")
 
@@ -271,7 +265,7 @@ def farm_standings_for_month(year, month):
 def farm_standings_for_day(standings_list: list[Any], target_date_string: str):
     # if we already have data for this day, skip it
     find_one_result = collection_team_standings.find_one({"date": target_date_string})
-    if find_one_result and not DEBUG_BACKFILL_ALWAYS_OVERWRITE_CACHED_DATA:
+    if find_one_result and not DEBUG_BACKFILL_ALWAYS_OVERWRITE_CACHED_TEAM_STANDINGS_DATA:
         print(" ..Data already exists in our database for this day, moving on..")
     else:
         daily_standings = nhl_client.standings.league_standings(date=target_date_string)
@@ -452,11 +446,13 @@ try:
 
     for season in seasons_to_run:
         season_start = date.fromisoformat(season["standingsStart"])
-        season_end = date.fromisoformat(season["standingsEnd"])
+        season_end = min(date.fromisoformat(season["standingsEnd"]), date.today() - timedelta(days=1))
         print(f"Farming season {season['id']} ({season_start} to {season_end}):")
 
         for year, month in months_spanning(season_start, season_end):
-            standings_for_month = farm_standings_for_month(year, month)
+            start_day_of_the_month = 1 if season_start.month != month else season_start.day
+            end_day_of_the_month = 31 if season_end.month != month else season_end.day
+            standings_for_month = farm_standings_for_month(year, month, start_day_of_the_month, end_day_of_the_month)
             store_standings_in_mongo(standings_for_month)
 
             # all done; how about a blank line?
