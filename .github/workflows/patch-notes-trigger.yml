@@ -14,6 +14,7 @@ name: Patch Notes Trigger
 on:
   push:
     branches: [main]
+  workflow_dispatch: # this is only here to allow me to manually run the workflow
 
 jobs:
   trigger:
