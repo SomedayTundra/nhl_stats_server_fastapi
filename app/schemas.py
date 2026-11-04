@@ -20,11 +20,17 @@ class TeamInfo(CamelModel):
     team_name: str
     team_common_name: str
     logo: str
+    # the dark-background crest (for a dark page theme); None when the NHL has no dark version
+    # of this crest, or for seasons not yet run through backfill_dark_logos.py - use `logo` then
+    logo_dark: Optional[str] = None
     conference_name: str = "NA"
     conference_abbrev: str = "NA"
     division_name: str
     division_abbrev: str
     chart_line_color: Optional[str] = None
+    # the dark page theme's line color, only for teams whose light one won't do there (too dark
+    # to read, or noticeably different on the dark crest); use chart_line_color when it's None
+    chart_line_color_dark: Optional[str] = None
 
 
 class TeamStanding(CamelModel):
@@ -35,7 +41,12 @@ class TeamStanding(CamelModel):
     team_common_name: str
     team_abbrev: str
     logo: str
+    # see TeamInfo.logo_dark
+    logo_dark: Optional[str] = None
     chart_line_color: Optional[str] = None
+    # the dark page theme's line color, only for teams whose light one won't do there (too dark
+    # to read, or noticeably different on the dark crest); use chart_line_color when it's None
+    chart_line_color_dark: Optional[str] = None
     games_played: int
     win_pctg: float
     wins: int

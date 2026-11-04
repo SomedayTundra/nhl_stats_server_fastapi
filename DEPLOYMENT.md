@@ -122,7 +122,21 @@ optional `triggered_by` note (`vercel-cron (...)` for the cron), host, OS user, 
 the actor and run URL. It also appends the same thing as one line to
 `app/scripts/update_mongo.log` on the machine that ran it (gitignored; useful for local runs, gone
 with the runner in Actions).
-When it sees a new team it downloads the logo SVG into `app/logos/`; the workflow then runs
+When it sees a new team it downloads the logo SVG into `app/logos/`, along with the NHL's
+dark-background version of it (`..._dark.svg`, stored as `teamLogoDark`/`localLogoDark` on the
+team's `team_data` entry, with `localLogoDark: None` for the few historical crests that have no
+dark version; see `app/lib/team_logos.py`). Seasons farmed before that are filled in by
+`python -m app.scripts.backfill_dark_logos` (resumable, writes to whatever `MONGO_URI` points at).
+Adding a team also recolors its season's chart lines, including `chartLineColorDark`, the line
+color for the dark page theme. It's stored only for teams whose light color is too dark to read on
+that page or looks noticeably different on the dark crest; see `app/lib/chart_line_color.py`. Run
+`python -m app.scripts.backfill_chart_line_color` after `backfill_dark_logos` for seasons farmed
+before that. It recomputes every season and is safe to re-run.
+A dark crest the NHL draws as an outline around a see-through middle needs the middle filled by
+hand, as was done for both Tampa Bay crests (an ellipse behind the artwork: white on the light
+crest, team navy on the dark one). Otherwise the middle shows whatever is behind the logo, and
+`build-logos.mjs`, which sizes crests by how much of them is opaque, blows the crest up.
+The workflow then runs
 `npm run build:logos` and opens a `farm/new-logos` PR. Merge it to ship the logos. (Run locally,
 do the same by hand: `npm install && npm run build:logos`, commit.) GitHub pauses scheduled
 workflows after 60 days of repo inactivity — re-enable from the Actions tab if so.

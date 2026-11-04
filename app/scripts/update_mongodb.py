@@ -34,6 +34,7 @@ load_dotenv()
 
 from app.constants import mongo_db_constants as mongo
 from app.lib.chart_line_color import recolor_season
+from app.lib.team_logos import dark_logo_url, ensure_local_logo
 
 ############################################
 # DEBUG FLAGS
@@ -302,6 +303,10 @@ def store_standings_in_mongo(standings_list: list[Any]):
                 if DEBUG_VERBOSE:
                     print(f"(team data already exists in db for {TEAM_NAME} in season {season_id}, skipping)")
             else:
+                # the dark-background crest for Aurora; a few historical crests have none, which is
+                # stored as None so clients fall back to the light one (see app/lib/team_logos.py)
+                dark_url = dark_logo_url(team["teamLogo"], team.get("teamLogoDark"))
+                local_dark_logo = ensure_local_logo(dark_url) if dark_url else None
                 collection_teams_data.update_one(
                     {"seasonId": season_id},
                     {
@@ -319,6 +324,8 @@ def store_standings_in_mongo(standings_list: list[Any]):
                                 "teamAbbrev": TEAM_ABBREV,
                                 "teamLogo": team["teamLogo"],
                                 "localLogo": get_image_name_from_image_url(team["teamLogo"]),
+                                "teamLogoDark": dark_url if local_dark_logo else None,
+                                "localLogoDark": local_dark_logo,
                             }
                         }
                     },

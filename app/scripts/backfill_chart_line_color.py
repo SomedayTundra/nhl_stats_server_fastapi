@@ -2,6 +2,9 @@
 # (RE)ASSIGNS chartLineColor TO EVERY TEAM IN EVERY
 # team_data DOCUMENT, FROM EACH TEAM'S OWN LOGO
 #
+# Also (re)assigns chartLineColorDark, the dark page theme's line color, to the teams that need
+# one, and removes it from those that don't - see app/lib/chart_line_color.py.
+#
 # update_mongodb.py does this itself whenever it adds a team to a season, so this is only needed
 # for seasons farmed before it did - or after changing the color-picking rules in
 # app/lib/chart_line_color.py, since it recomputes every season from scratch rather than skipping
@@ -48,13 +51,19 @@ def main() -> None:
         season_ids = sorted(collection_team_data.distinct("seasonId"))
 
     team_count = 0
+    dark_count = 0
     for season_id in season_ids:
         colors = recolor_season(collection_team_data, season_id, dry_run=args.dry_run)
-        team_count += len(colors)
-        print(f"{season_id}: " + " ".join(f"{abbrev}={color}" for abbrev, color in sorted(colors.items())))
+        team_count += len(colors.light)
+        dark_count += len(colors.dark)
+        print(f"{season_id}: " + " ".join(
+            f"{abbrev}={color}" + (f"/{colors.dark[abbrev]}" if abbrev in colors.dark else "")
+            for abbrev, color in sorted(colors.light.items())
+        ))
 
     verb = "Would color" if args.dry_run else "Colored"
-    print(f"\n{verb} {team_count} team(s) across {len(season_ids)} season(s).")
+    print(f"\n{verb} {team_count} team(s) across {len(season_ids)} season(s), "
+          f"{dark_count} of them with a separate dark-theme color (shown after the /).")
 
 
 if __name__ == "__main__":

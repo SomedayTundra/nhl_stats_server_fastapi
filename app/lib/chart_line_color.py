@@ -12,6 +12,13 @@
 # Colors are always assigned for a whole season at a time, in a fixed order that doesn't depend on
 # which order teams were farmed in, so update_mongodb.py (which adds teams one at a time) and
 # backfill_chart_line_color.py (which recolors every season at once) always agree.
+#
+# The dark page theme (Aurora) gets a second pass: the same rules, run on the dark crests, keeping
+# only colors that stand out against Aurora's near-black page. Most crests are navy, red or green
+# at the core, so many light colors are unreadable there (TOR, WPG and WSH are barely brighter than
+# the page). A team only stores that dark color (chartLineColorDark) when it differs noticeably
+# from its light one, or the light one isn't readable on the dark page; otherwise the client just
+# uses chartLineColor in both themes.
 ###################################################
 
 import colorsys
@@ -19,7 +26,7 @@ import io
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import resvg_py
 from PIL import Image
@@ -68,6 +75,18 @@ NO_COLOR_FALLBACK = {
 }
 DEFAULT_COLOR = "#808080"
 
+# the dark theme's page color (Aurora's --st-page in the @somedaytundra/theme package), and the
+# contrast a line needs against it: 3:1 is WCAG's minimum for graphics like chart lines
+DARK_PAGE_BACKGROUND = "#05070B"
+MIN_DARK_CONTRAST = 3.0
+
+# a dark color is only stored when it's at least this far (CIE76 delta-E) from the light one;
+# anything closer would look the same on the chart, so the light color is used in both themes
+MIN_DARK_CHANGE = MIN_DELTA_E
+
+# how far a too-dark color is lifted at a time until it's readable on the dark page
+LIGHTEN_STEP = 0.03
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -80,9 +99,15 @@ def _render_logo(local_logo: str) -> Image.Image:
     try:
         png_bytes = bytes(resvg_py.svg_to_bytes(svg_path=str(svg_path), width=RENDER_WIDTH))
         return Image.open(io.BytesIO(png_bytes)).convert("RGBA")
-    except Exception:
-        # the pre-rasterized PNG build-logos.mjs writes next to each SVG, if resvg can't cope
+    except (ValueError, OSError):
+        # resvg raises ValueError for an SVG it can't parse (or can't find); OSError covers Pillow
+        # failing to read what it produced. Either way, fall back to the pre-rasterized PNG
+        # build-logos.mjs writes next to each SVG
         return Image.open(svg_path.with_name(f"{svg_path.stem}@2x.png")).convert("RGBA")
+
+
+def _rgb_to_hex(r: int, g: int, b: int) -> str:
+    return f"#{r:02X}{g:02X}{b:02X}"
 
 
 @cache
@@ -92,7 +117,10 @@ def logo_color_candidates(local_logo: str) -> tuple[Candidate, ...]:
 
     # group key -> [pixel count, r sum, g sum, b sum]
     groups: dict[tuple[int, int], list[int]] = {}
-    for r, g, b, a in image.get_flattened_data():
+    # typed as a union because get_flattened_data(band=...) returns one float per pixel; with no
+    # band, an RGBA image always gives (r, g, b, a) tuples
+    pixels = cast(tuple[tuple[int, int, int, int], ...], image.get_flattened_data())
+    for r, g, b, a in pixels:
         if a < MIN_ALPHA or max(r, g, b) - min(r, g, b) < MIN_CHROMA:
             continue
         hue, lightness, _ = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
@@ -108,10 +136,10 @@ def logo_color_candidates(local_logo: str) -> tuple[Candidate, ...]:
     total = sum(group[0] for group in groups.values())
     candidates = [
         Candidate(
-            color="#{:02X}{:02X}{:02X}".format(*(round(channel / count) for channel in sums)),
+            color=_rgb_to_hex(round(r_sum / count), round(g_sum / count), round(b_sum / count)),
             share=count / total,
         )
-        for count, *sums in groups.values()
+        for count, r_sum, g_sum, b_sum in groups.values()
     ]
     candidates.sort(key=lambda candidate: candidate.share, reverse=True)
     return tuple(candidates)
@@ -140,60 +168,157 @@ def delta_e(color_a: str, color_b: str) -> float:
     return sum((p - q) ** 2 for p, q in zip(lab_a, lab_b)) ** 0.5
 
 
+def _with_lightness(color: str, lightness: float) -> str:
+    r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    hue, _, saturation = colorsys.rgb_to_hls(r, g, b)
+    r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
+    return _rgb_to_hex(round(r * 255), round(g * 255), round(b * 255))
+
+
+def _lightness(color: str) -> float:
+    r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return colorsys.rgb_to_hls(r, g, b)[1]
+
+
 def _shade_variants(color: str):
     """The same hue, alternately lighter and darker, a little further each time."""
-    r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
-    hue, lightness, saturation = colorsys.rgb_to_hls(r, g, b)
+    lightness = _lightness(color)
     for step in range(1, MAX_SHADE_STEPS + 1):
         for direction in (1, -1):
-            shifted = min(max(lightness + direction * step * SHADE_STEP, 0.08), 0.85)
-            yield "#{:02X}{:02X}{:02X}".format(
-                *(round(channel * 255) for channel in colorsys.hls_to_rgb(hue, shifted, saturation))
-            )
+            yield _with_lightness(color, min(max(lightness + direction * step * SHADE_STEP, 0.08), 0.85))
 
 
-def assign_season_colors(teams: list[dict[str, Any]]) -> dict[str, str]:
-    """teamAbbrev -> chart line color for every team in one season's team_data document."""
-    candidates_by_abbrev = {team["teamAbbrev"]: logo_color_candidates(team["localLogo"]) for team in teams}
+def _dark_shade_variants(color: str):
+    """The same hue at every lightness from this color's up to pale, nearest first; the dark
+    pass's wider stand-in for _shade_variants (darker shades would fail the contrast check)."""
+    lightness = _lightness(color)
+    while lightness < 0.85:
+        lightness = min(lightness + LIGHTEN_STEP, 0.85)
+        yield _with_lightness(color, lightness)
+
+
+def _relative_luminance(color: str) -> float:
+    def linear(channel: int) -> float:
+        c = channel / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (linear(int(color[i:i + 2], 16)) for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast_ratio(color_a: str, color_b: str) -> float:
+    """WCAG contrast ratio, 1 (identical) to 21 (black on white)."""
+    lighter, darker = sorted((_relative_luminance(color_a), _relative_luminance(color_b)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def readable_on_dark(color: str) -> bool:
+    return contrast_ratio(color, DARK_PAGE_BACKGROUND) >= MIN_DARK_CONTRAST
+
+
+def _lifted_until_readable(color: str) -> str:
+    """The same hue, lightened just enough to stand out against the dark page."""
+    lightness = _lightness(color)
+    while not readable_on_dark(color) and lightness < 0.85:
+        lightness = min(lightness + LIGHTEN_STEP, 0.85)
+        color = _with_lightness(color, lightness)
+    return color
+
+
+def assign_season_colors(teams: list[dict[str, Any]], dark: bool = False) -> dict[str, str]:
+    """teamAbbrev -> chart line color for every team in one season's team_data document.
+
+    With dark=True, colors come from each team's dark crest (or its light one, when the NHL has no
+    dark crest or the dark one has no color at all) and must be readable on the dark page.
+    """
+    def candidates_for(team: dict[str, Any]) -> tuple[Candidate, ...]:
+        if dark and team.get("localLogoDark"):
+            return logo_color_candidates(team["localLogoDark"]) or logo_color_candidates(team["localLogo"])
+        return logo_color_candidates(team["localLogo"])
+
+    def usable(color: str) -> bool:
+        return not dark or readable_on_dark(color)
+
+    candidates_by_abbrev = {team["teamAbbrev"]: candidates_for(team) for team in teams}
 
     # the team with the most dominant single color gets first claim on it; abbrev breaks ties so
     # the order never depends on how the teams happen to be stored
-    def claim_order(abbrev: str) -> tuple[float, str]:
-        candidates = candidates_by_abbrev[abbrev]
-        return (-candidates[0].share if candidates else 0.0, abbrev)
+    def claim_order(team_abbrev: str) -> tuple[float, str]:
+        team_candidates = candidates_by_abbrev[team_abbrev]
+        return -team_candidates[0].share if team_candidates else 0.0, team_abbrev
 
     assigned: dict[str, str] = {}
     for abbrev in sorted(candidates_by_abbrev, key=claim_order):
         candidates = candidates_by_abbrev[abbrev]
         if not candidates:
-            assigned[abbrev] = NO_COLOR_FALLBACK.get(abbrev, DEFAULT_COLOR)
+            fallback = NO_COLOR_FALLBACK.get(abbrev, DEFAULT_COLOR)
+            assigned[abbrev] = _lifted_until_readable(fallback) if dark else fallback
             continue
         taken = list(assigned.values())
 
         def is_clear(color: str) -> bool:
-            return all(delta_e(color, other) >= MIN_DELTA_E for other in taken)
+            return usable(color) and all(delta_e(color, other) >= MIN_DELTA_E for other in taken)
 
         top, *alternates = candidates
+        # on the dark page, a color too dark to read is first lifted to its readable shade, so the
+        # team keeps its own hue rather than jumping straight to a secondary color
+        base = _lifted_until_readable(top.color) if dark else top.color
         options = [top.color, *(c.color for c in alternates if c.share >= MIN_ALTERNATE_SHARE)]
+        if not dark:
+            assigned[abbrev] = next(
+                (color for color in [*options, *_shade_variants(base)] if is_clear(color)),
+                # nothing is clear of everyone - the logo's own top color still beats a made-up one
+                base,
+            )
+            continue
+        # lifting the many navy crests lands them all in the same few blues, so the dark pass
+        # searches more shades, and when none is fully clear takes whichever readable one is
+        # furthest from every color already taken
+        options = [color for color in [top.color, base, *options[1:], *_dark_shade_variants(base)] if usable(color)]
         assigned[abbrev] = next(
-            (color for color in [*options, *_shade_variants(top.color)] if is_clear(color)),
-            # nothing is clear of everyone - the logo's own top color still beats a made-up one
-            top.color,
+            (color for color in options if is_clear(color)),
+            max(options, key=lambda color: min((delta_e(color, other) for other in taken), default=0.0)),
         )
     return assigned
 
 
-def recolor_season(collection_team_data, season_id: int, dry_run: bool = False) -> dict[str, str]:
-    """(Re)assigns chartLineColor to every team in one season's team_data document."""
+def assign_season_dark_colors(teams: list[dict[str, Any]], light_colors: dict[str, str]) -> dict[str, str]:
+    """teamAbbrev -> dark-theme line color, only for the teams whose light color won't do there."""
+    dark_colors = assign_season_colors(teams, dark=True)
+    return {
+        abbrev: color
+        for abbrev, color in dark_colors.items()
+        if abbrev not in light_colors
+        or not readable_on_dark(light_colors[abbrev])
+        or delta_e(color, light_colors[abbrev]) >= MIN_DARK_CHANGE
+    }
+
+
+@dataclass(frozen=True)
+class SeasonColors:
+    light: dict[str, str]  # teamAbbrev -> chartLineColor, every team
+    dark: dict[str, str]  # teamAbbrev -> chartLineColorDark, only the teams that need one
+
+
+def recolor_season(collection_team_data, season_id: int, dry_run: bool = False) -> SeasonColors:
+    """(Re)assigns chartLineColor, and chartLineColorDark where needed, to every team in one
+    season's team_data document. A team that no longer needs a dark color has it removed."""
     doc = collection_team_data.find_one({"seasonId": season_id})
     if doc is None:
-        return {}
-    colors = assign_season_colors(doc.get("teams", []))
+        return SeasonColors(light={}, dark={})
+    teams = doc.get("teams", [])
+    light = assign_season_colors(teams)
+    dark = assign_season_dark_colors(teams, light)
     if not dry_run:
-        for abbrev, color in colors.items():
+        for abbrev, color in light.items():
+            update: dict[str, dict[str, str]] = {"$set": {"teams.$[team].chartLineColor": color}}
+            if abbrev in dark:
+                update["$set"]["teams.$[team].chartLineColorDark"] = dark[abbrev]
+            else:
+                update["$unset"] = {"teams.$[team].chartLineColorDark": ""}
             collection_team_data.update_one(
                 {"seasonId": season_id},
-                {"$set": {"teams.$[team].chartLineColor": color}},
+                update,
                 array_filters=[{"team.teamAbbrev": abbrev}],
             )
-    return colors
+    return SeasonColors(light=light, dark=dark)
