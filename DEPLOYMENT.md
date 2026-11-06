@@ -127,6 +127,12 @@ dark-background version of it (`..._dark.svg`, stored as `teamLogoDark`/`localLo
 team's `team_data` entry, with `localLogoDark: None` for the few historical crests that have no
 dark version; see `app/lib/team_logos.py`). Seasons farmed before that are filled in by
 `python -m app.scripts.backfill_dark_logos` (resumable, writes to whatever `MONGO_URI` points at).
+The backfill ends by listing the SVGs it newly downloaded. If it lists any, run
+`npm run build:logos` and commit `app/logos`. Go by that list, not a guess made beforehand that
+"every crest should already be on disk". A skipped build fails silently: `/logo` falls back to the
+raw SVG, which renders scratchy and unevenly sized. The SVGs land in your checkout even when
+`MONGO_URI` is production, so a production backfill isn't shipped until they're built and
+committed.
 Adding a team also recolors its season's chart lines, including `chartLineColorDark`, the line
 color for the dark page theme. It's stored only for teams whose light color is too dark to read on
 that page or looks noticeably different on the dark crest; see `app/lib/chart_line_color.py`. Run

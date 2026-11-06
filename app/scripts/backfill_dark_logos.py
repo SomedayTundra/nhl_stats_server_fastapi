@@ -15,9 +15,17 @@
 #
 # Only touches team entries actually missing `localLogoDark`, so an interrupted run can simply be
 # re-run. A crest with no dark version is stored as None, not left missing, so it isn't
-# re-checked every run. Afterwards, run `npm run build:logos` so any newly downloaded SVGs get
-# optimized and rasterized like the rest. It writes to whatever MONGO_URI points at: the local
-# mongod by default, or production when MONGO_URI is set to the Atlas URI.
+# re-checked every run.
+#
+# The run ends by listing every SVG it newly downloaded into app/logos. If it lists any, run
+# `npm run build:logos` and commit app/logos, so they get optimized and rasterized like the rest.
+# That list is the only thing to go by: don't decide beforehand that "every crest is already in
+# app/logos" and skip the build, since this checkout can lag the farm's `farm/new-logos` PRs.
+# A skipped build breaks nothing visibly (the /logo route falls back to the raw SVG), which is
+# exactly why it goes unnoticed: the crest just renders scratchy and unevenly sized. The script
+# writes to whatever MONGO_URI points at: the local mongod by default, or production when
+# MONGO_URI is set to the Atlas URI. The SVGs always land in this checkout, though, so a production
+# backfill isn't finished until they're built and committed.
 ###################################################
 
 import argparse
@@ -29,7 +37,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.constants import mongo_db_constants as mongo
-from app.lib.team_logos import dark_logo_url, ensure_local_logo
+from app.lib.team_logos import LOGOS_DIR, dark_logo_url, ensure_local_logo, logo_filename
 
 
 def parse_args():
@@ -56,6 +64,8 @@ def main() -> None:
 
     # one result per distinct crest, so a logo shared by many seasons is fetched only once
     resolved: dict[str, tuple[str | None, str | None]] = {}
+    # dark SVGs that weren't in app/logos before this run (or, in a dry run, would be downloaded)
+    downloaded: list[str] = []
     seasons = teams_updated = found = missing = 0
 
     with httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent": "nhl-stats-server-backfill"}) as client:
@@ -67,9 +77,16 @@ def main() -> None:
                 light_url = team["teamLogo"]
                 if light_url not in resolved:
                     url = dark_logo_url(light_url)
-                    local = ensure_local_logo(url, client) if url and not args.dry_run else None
-                    if url and args.dry_run:
-                        local = url.split("/")[-1] if client.head(url).status_code == 200 else None
+                    local = None
+                    if url:
+                        already_on_disk = (LOGOS_DIR / logo_filename(url)).is_file()
+                        if args.dry_run:
+                            if already_on_disk or client.head(url).status_code == 200:
+                                local = logo_filename(url)
+                        else:
+                            local = ensure_local_logo(url, client)
+                        if local and not already_on_disk:
+                            downloaded.append(local)
                     resolved[light_url] = (url if local else None, local)
                 team["teamLogoDark"], team["localLogoDark"] = resolved[light_url]
                 teams_updated += 1
@@ -92,8 +109,22 @@ def main() -> None:
         f"{found} with a dark logo, {missing} without (light fallback). "
         f"{len(resolved)} distinct crest(s), {crests_found} with a dark version."
     )
-    if found and not args.dry_run:
-        print("Run `npm run build:logos` so any newly downloaded SVGs get optimized and rasterized.")
+    print()
+    if downloaded:
+        print(f"{'Would download' if args.dry_run else 'Downloaded'} {len(downloaded)} new SVG(s) into app/logos:")
+        for name in sorted(downloaded):
+            print(f"  {name}")
+        if not args.dry_run:
+            print(
+                "NEXT STEP: run `npm run build:logos`, then commit app/logos. Until then /logo serves these as raw "
+                "SVGs (scratchy, unevenly sized), and production won't have them at all."
+            )
+    else:
+        print(
+            f"No new SVGs {'would be ' if args.dry_run else ''}downloaded: every dark crest "
+            f"{'this run needs is' if args.dry_run else 'it used was'} already in app/logos, "
+            "so there's nothing new for `npm run build:logos`."
+        )
 
 
 if __name__ == "__main__":

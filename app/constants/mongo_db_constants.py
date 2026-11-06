@@ -24,7 +24,7 @@ COLLECTION_USER_DATA = "user_data"
 
 
 # fail fast instead of hanging ~30s on the default server-selection timeout when the URI is wrong
-print(f'MONGO_URI = {URI}')
+print(f'MONGO_URI = {URI_DISPLAY}')
 client = MongoClient(URI, serverSelectionTimeoutMS=5000)
 try:
     # connect to MongoDB
