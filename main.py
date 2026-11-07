@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
 # Allowed browser origins for cross-origin requests. Production sets CORS_ALLOW_ORIGINS to a
-# comma-separated list (e.g. "https://somedaytundra.com,https://www.somedaytundra.com"); with it
+# comma-separated list (today just "https://nhl.somedaytundra.com"); with it
 # unset we fall back to the local dev origins. allow_credentials=True rules out a "*" wildcard.
 _default_origins = "http://localhost,http://localhost:5173"
 origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", _default_origins).split(",") if o.strip()]

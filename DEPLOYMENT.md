@@ -6,11 +6,13 @@ Full-system runbook. The client repo (`nhl_stats_client_react`) has a short poin
 
 | Piece | Where | Deploys on |
 |---|---|---|
-| React client | **Vercel**, `www.somedaytundra.com` (apex redirects to `www`) | push to client `main` (Vercel GitHub integration); previews per PR |
+| React client | **Vercel** project `nhl-stats-client-react`, `nhl.somedaytundra.com` | push to client `main` (Vercel GitHub integration); previews per PR |
+| SomedayTundra dashboard | **Vercel**, `www.somedaytundra.com` (apex redirects to `www`); separate repo `somedaytundra_dashboard`. It redirects the client's old `www` paths (`/nhl_standings` etc.) to `nhl.` | push to dashboard `main` |
+| Sign-in | **Clerk** production instance shared by the dashboard and the client (`clerk.`/`accounts.` subdomains). The API doesn't check sign-in yet | — |
 | FastAPI | **Fly.io** app `nhl-stats-api`, `api.somedaytundra.com` | push to this repo's `main` (`.github/workflows/deploy.yml`) |
 | MongoDB | **Atlas M0** (free, AWS us-east-1), database `nhl_stats` | — |
 | Farming | GitHub Actions (`.github/workflows/farm.yml`), dispatched daily ~11:00 UTC by a Vercel Cron Job in the client repo (`api/trigger-farm.ts`); GitHub `schedule` at 14:37 UTC as a fallback | Vercel Cron / schedule / manual dispatch |
-| DNS | Route 53 zone `somedaytundra.com` (domain registered at AWS) | — |
+| DNS | Route 53 zone `somedaytundra.com` (domain registered at AWS): `api` (Fly), `nhl`, `www`, apex and `bulldog` (Vercel), plus the records Clerk's production instance lists under Domains (`clerk`, `accounts`, `clkmail`, DKIM) | — |
 
 Cost: Vercel Hobby $0, Atlas M0 $0, Fly ~$3–4/mo (one always-on shared-cpu-1x 512 MB machine),
 Route 53 $0.50/mo + domain renewal. The database is ~96 MB uncompressed and grows ~1.3 MB/season,
@@ -29,7 +31,7 @@ well under M0's 512 MB.
 | Var | Where it's set | Purpose |
 |---|---|---|
 | `MONGO_URI` | Fly secret; GitHub secret (farm job) | Atlas `mongodb+srv://` URI. The DB name is always `nhl_stats`, regardless of the URI path. |
-| `CORS_ALLOW_ORIGINS` | Fly secret | `https://nhl.somedaytundra.com,https://www.somedaytundra.com,https://somedaytundra.com` |
+| `CORS_ALLOW_ORIGINS` | Fly secret | `https://nhl.somedaytundra.com`, the only site that calls the API. Comma-separate any others. |
 | `CORS_ALLOW_ORIGIN_REGEX` | Fly secret | Lets the client's Vercel previews call the API: `^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$` |
 | `ENABLE_ONDEMAND_FARMING` | `fly.toml` `[env]` | `false` — the farm job keeps the DB current instead. |
 | `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Fly secrets | Read-only proxy behind `/api/jira` for the client's `/jira` page. Use a scoped token (`read:jira-work`, `read:jira-user`) with `https://api.atlassian.com/ex/jira/<cloudId>`. Unset → those routes answer 503. |
@@ -69,7 +71,7 @@ MONGO_URI='mongodb+srv://nhl_api:...' python -m app.scripts.restore_mongo \
 fly auth signup            # or: fly auth login
 fly launch --no-deploy --copy-config   # keep the committed fly.toml; pick a new app name if taken
 fly secrets set MONGO_URI='mongodb+srv://...' \
-  CORS_ALLOW_ORIGINS='https://www.somedaytundra.com,https://somedaytundra.com' \
+  CORS_ALLOW_ORIGINS='https://nhl.somedaytundra.com' \
   CORS_ALLOW_ORIGIN_REGEX='^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$' \
   JIRA_BASE_URL='https://api.atlassian.com/ex/jira/<cloudId>' \
   JIRA_EMAIL='<your Atlassian login email>' \
@@ -95,10 +97,16 @@ asks for one). `fly certs show api.somedaytundra.com` should reach **Issued** wi
 
 ### 6. Vercel (client)
 - New Project → import `SomedayTundra/nhl_stats_client_react`. Framework preset Vite; defaults are
-  right (`npm run build`, output `dist`). No env vars needed — `.env.production` supplies the API URL.
-- Settings → Domains: add `www.somedaytundra.com` (primary) and `somedaytundra.com` (redirect to www).
-- Route 53: `CNAME www → cname.vercel-dns.com` and apex `A → 76.76.21.21` — use whatever values the
-  Vercel domain screen shows if they differ. Vercel issues the certs.
+  right (`npm run build`, output `dist`). `.env.production` supplies the API URL. Set
+  `VITE_CLERK_PUBLISHABLE_KEY`: the Clerk production `pk_live_…` key for Production, the development
+  `pk_test_…` key for Preview (a live key only works on `somedaytundra.com` hosts, not
+  `*.vercel.app`). Vite bakes it in at build time, so redeploy after changing it.
+- Domains are managed from the team's **Domains** page (`somedaytundra.com` → Connect), not the
+  project's settings: connect `nhl.somedaytundra.com` to this project. `www` and the apex belong to
+  the dashboard's project.
+- Route 53: `CNAME nhl →` the value Vercel's domain screen shows (`cname.vercel-dns.com` or a
+  project-specific `…vercel-dns…` host). Vercel issues the certs. Keep DNS in Route 53: don't click
+  "Enable Vercel DNS", which would move the nameservers and orphan the `api` and Clerk records.
 - Note the preview hostname pattern (Deployments → any preview) and make sure the
   `CORS_ALLOW_ORIGIN_REGEX` secret matches it.
 
