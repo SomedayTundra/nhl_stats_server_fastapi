@@ -19,3 +19,6 @@ backups/
 # logo build tooling (scripts/build-logos.mjs)
 node_modules/
 package-lock.json
+
+# Claude Code per-user settings (can hold approved commands verbatim)
+/.claude/settings.local.json
