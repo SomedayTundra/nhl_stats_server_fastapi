@@ -29,7 +29,7 @@ well under M0's 512 MB.
 | Var | Where it's set | Purpose |
 |---|---|---|
 | `MONGO_URI` | Fly secret; GitHub secret (farm job) | Atlas `mongodb+srv://` URI. The DB name is always `nhl_stats`, regardless of the URI path. |
-| `CORS_ALLOW_ORIGINS` | Fly secret | `https://www.somedaytundra.com,https://somedaytundra.com` |
+| `CORS_ALLOW_ORIGINS` | Fly secret | `https://nhl.somedaytundra.com,https://www.somedaytundra.com,https://somedaytundra.com` |
 | `CORS_ALLOW_ORIGIN_REGEX` | Fly secret | Lets the client's Vercel previews call the API: `^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$` |
 | `ENABLE_ONDEMAND_FARMING` | `fly.toml` `[env]` | `false` — the farm job keeps the DB current instead. |
 | `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Fly secrets | Read-only proxy behind `/api/jira` for the client's `/jira` page. Use a scoped token (`read:jira-work`, `read:jira-user`) with `https://api.atlassian.com/ex/jira/<cloudId>`. Unset → those routes answer 503. |
@@ -77,6 +77,13 @@ fly secrets set MONGO_URI='mongodb+srv://...' \
 fly deploy
 curl https://nhl-stats-api.fly.dev/health          # -> {"status":"ok"}
 ```
+**Run `fly secrets set` from bash or PowerShell, never Windows `cmd.exe`.** `cmd` doesn't treat
+single quotes as quoting, so the quotes become part of the value: `CORS_ALLOW_ORIGINS` turns into
+`'https://…,https://…'`, the first and last origins no longer match, and the browser reports CORS
+errors even though `fly secrets list` shows the secret as Deployed. To check what the machine
+actually has: `fly ssh console -a nhl-stats-api -C "printenv CORS_ALLOW_ORIGINS"`. To check the API
+from outside, a preflight should echo the origin back:
+`curl -si -X OPTIONS -H "Origin: https://nhl.somedaytundra.com" -H "Access-Control-Request-Method: GET" https://api.somedaytundra.com/api/league_info | grep -i allow-origin`
 If the app name changes, update `app =` in `fly.toml` and the `-a` in the token command below.
 
 ### 5. API domain
