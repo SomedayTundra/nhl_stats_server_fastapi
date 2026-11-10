@@ -21,9 +21,10 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
 # Allowed browser origins for cross-origin requests. Production sets CORS_ALLOW_ORIGINS to a
-# comma-separated list (today just "https://nhl.somedaytundra.com"); with it
-# unset we fall back to the local dev origins. allow_credentials=True rules out a "*" wildcard.
-_default_origins = "http://localhost,http://localhost:5173"
+# comma-separated list ("https://nhl.somedaytundra.com" plus "https://www.somedaytundra.com", the
+# SomedayTundra dashboard, whose blog link dialog lists Jira issues); with it unset we fall back to
+# the local dev origins (5180 is the dashboard's dev server). allow_credentials=True rules out a "*" wildcard.
+_default_origins = "http://localhost,http://localhost:5173,http://localhost:5180"
 origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", _default_origins).split(",") if o.strip()]
 # Optional extra origins by pattern - production uses it for the client's Vercel preview
 # deployments, whose hostnames change per branch/commit.

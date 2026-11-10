@@ -32,7 +32,7 @@ well under M0's 512 MB.
 | Var | Where it's set | Purpose |
 |---|---|---|
 | `MONGO_URI` | Fly secret; GitHub secret (farm job) | Atlas `mongodb+srv://` URI. The DB name is always `nhl_stats`, regardless of the URI path. |
-| `CORS_ALLOW_ORIGINS` | Fly secret | `https://nhl.somedaytundra.com`, the only site that calls the API. Comma-separate any others. |
+| `CORS_ALLOW_ORIGINS` | Fly secret | `https://nhl.somedaytundra.com,https://www.somedaytundra.com`: the NHL Stats client, plus the SomedayTundra dashboard, whose blog link dialog reads `/api/jira/issues`. Comma-separate any others. |
 | `CORS_ALLOW_ORIGIN_REGEX` | Fly secret | Lets the client's Vercel previews call the API: `^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$` |
 | `ENABLE_ONDEMAND_FARMING` | `fly.toml` `[env]` | `false` — the farm job keeps the DB current instead. |
 | `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Fly secrets | Read-only proxy behind `/api/jira` for the client's `/jira` page. Use a scoped token (`read:jira-work`, `read:jira-user`) with `https://api.atlassian.com/ex/jira/<cloudId>`. Unset → those routes answer 503. |
@@ -72,7 +72,7 @@ MONGO_URI='mongodb+srv://nhl_api:...' python -m app.scripts.restore_mongo \
 fly auth signup            # or: fly auth login
 fly launch --no-deploy --copy-config   # keep the committed fly.toml; pick a new app name if taken
 fly secrets set MONGO_URI='mongodb+srv://...' \
-  CORS_ALLOW_ORIGINS='https://nhl.somedaytundra.com' \
+  CORS_ALLOW_ORIGINS='https://nhl.somedaytundra.com,https://www.somedaytundra.com' \
   CORS_ALLOW_ORIGIN_REGEX='^https://nhl-stats-client-react-[a-z0-9-]+-<vercel-team-slug>\.vercel\.app$' \
   JIRA_BASE_URL='https://api.atlassian.com/ex/jira/<cloudId>' \
   JIRA_EMAIL='<your Atlassian login email>' \
