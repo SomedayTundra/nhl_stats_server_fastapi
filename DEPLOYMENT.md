@@ -11,10 +11,11 @@ Full-system runbook. The client repo (`nhl_stats_client_react`) has a short poin
 | Sign-in | **Clerk** production instance shared by the dashboard and the client (`clerk.`/`accounts.` subdomains). The API doesn't check sign-in yet | — |
 | FastAPI | **Fly.io** app `nhl-stats-api`, `api.somedaytundra.com` | push to this repo's `main` (`.github/workflows/deploy.yml`) |
 | MongoDB | **Atlas M0** (free, AWS us-east-1), database `nhl_stats` | — |
+| Dashboard blog | The dashboard's own Vercel Function (`api/blog.ts`), a **separate** Atlas M0 in its own project (database `somedaytundra`), and a private **Cloudflare R2** bucket for images. Setup in the dashboard README | with the dashboard |
 | Farming | GitHub Actions (`.github/workflows/farm.yml`), dispatched daily ~11:00 UTC by a Vercel Cron Job in the client repo (`api/trigger-farm.ts`); GitHub `schedule` at 14:37 UTC as a fallback | Vercel Cron / schedule / manual dispatch |
 | DNS | Route 53 zone `somedaytundra.com` (domain registered at AWS): `api` (Fly), `nhl`, `www`, apex and `bulldog` (Vercel), plus the records Clerk's production instance lists under Domains (`clerk`, `accounts`, `clkmail`, DKIM) | — |
 
-Cost: Vercel Hobby $0, Atlas M0 $0, Fly ~$3–4/mo (one always-on shared-cpu-1x 512 MB machine),
+Cost: Vercel Hobby $0, Atlas M0 $0 (both clusters), R2 $0 under 10 GB, Fly ~$3–4/mo (one always-on shared-cpu-1x 512 MB machine),
 Route 53 $0.50/mo + domain renewal. The database is ~96 MB uncompressed and grows ~1.3 MB/season,
 well under M0's 512 MB.
 
