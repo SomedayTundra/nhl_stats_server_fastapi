@@ -9,6 +9,7 @@ load_dotenv()
 import uvicorn
 from fastapi import FastAPI
 
+from app.routes.farm_runs import router as farm_runs_router
 from app.routes.jira import router as jira_router
 from app.routes.nhl_playoffs import router as nhl_playoffs_router
 from app.routes.nhl_standings import router as nhl_standings_router
@@ -53,6 +54,7 @@ def health():
     return {"status": "ok"}
 
 
+app.include_router(farm_runs_router)                # /api/farm_runs
 app.include_router(jira_router)                     # /api/jira
 app.include_router(nhl_playoffs_router)             # /api/playoffs
 app.include_router(nhl_standings_router)            # /api/nhl_standings

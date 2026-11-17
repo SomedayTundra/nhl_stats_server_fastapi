@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -85,3 +86,27 @@ class SeasonInfo(CamelModel):
     # tagged yet (a brand-new season fetched straight from the NHL manifest); the client treats
     # that the same as False, which is correct since a season with no games yet can't overlap
     l10_ot_and_tie_overlap: Optional[bool] = None
+
+
+class FarmRun(CamelModel):
+    # one update_mongodb.py run, as served by /api/farm_runs. The stored document also has `host`
+    # and `os_user` (the machine and login that ran it), which the route leaves out on purpose:
+    # this endpoint is public, and those name a personal machine on manual runs
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+    duration_s: Optional[float] = None
+    # "success", or "error: <ExceptionType>" - the route drops the exception's message, which can
+    # carry hostnames or connection details
+    status: Optional[str] = None
+    trigger: Optional[str] = None  # "scheduled", "dispatch" or "manual"
+    triggered_by: Optional[str] = None
+    season_arg: Optional[int] = None  # None means "the current season"
+    github_actor: Optional[str] = None
+    github_run_id: Optional[str] = None
+    github_run_url: Optional[str] = None
+
+
+class FarmRuns(CamelModel):
+    # how many runs farm_runs keeps (mongo.FARM_RUNS_TO_KEEP), and those runs, newest first
+    farm_runs_to_keep: int
+    runs: list[FarmRun]

@@ -19,6 +19,10 @@ COLLECTION_TEAM_STANDINGS = "team_standings"
 COLLECTION_SEASON_INFO = "seasonInfo"
 # one document per update_mongodb.py run: when, how long, outcome, and who/what launched it
 COLLECTION_FARM_RUNS = "farm_runs"
+# farm_runs keeps only this many of the newest runs; update_mongodb.py drops the rest after each
+# run records itself. The client's Farm Runs page shows all of them, and gets this number from
+# /api/farm_runs so its description stays in step
+FARM_RUNS_TO_KEEP = 50
 
 COLLECTION_USER_DATA = "user_data"
 

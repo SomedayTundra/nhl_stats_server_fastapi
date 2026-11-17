@@ -10,7 +10,8 @@
 #     python -m app.scripts.update_mongodb --triggered-by "my laptop"   # tag who launched it
 #
 # Every run appends a line to update_mongo.log (next to this file) and inserts the same record
-# into the farm_runs collection - the file alone would vanish with a GitHub Actions runner.
+# into the farm_runs collection - the file alone would vanish with a GitHub Actions runner. The
+# collection keeps only the newest mongo.FARM_RUNS_TO_KEEP runs; older ones are pruned each run.
 #
 ###################################################
 
@@ -34,6 +35,7 @@ load_dotenv()
 
 from app.constants import mongo_db_constants as mongo
 from app.lib.chart_line_color import recolor_season
+from app.lib.farm_runs import prune_farm_runs
 from app.lib.team_logos import dark_logo_url, ensure_local_logo
 
 ############################################
@@ -165,6 +167,13 @@ def record_run(record: dict[str, Any], database=None):
             database[mongo.COLLECTION_FARM_RUNS].insert_one(dict(record))
         except Exception as e:
             print(f"WARNING: couldn't record this run in {mongo.COLLECTION_FARM_RUNS}: {e}")
+        # ...and keep only the newest FARM_RUNS_TO_KEEP runs; best-effort for the same reason
+        try:
+            pruned = prune_farm_runs(database[mongo.COLLECTION_FARM_RUNS], mongo.FARM_RUNS_TO_KEEP)
+            if pruned:
+                print(f"Pruned {pruned} old run(s) from {mongo.COLLECTION_FARM_RUNS}")
+        except Exception as e:
+            print(f"WARNING: couldn't prune old runs from {mongo.COLLECTION_FARM_RUNS}: {e}")
 
 
 def most_recently_started_season(season_manifest, today=None):
